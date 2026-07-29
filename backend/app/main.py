@@ -2,11 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.core.database import init_db, SessionLocal
-from app.config import get_settings
-from app.models.user import User
+from .core.database import init_db, SessionLocal
+from .config import get_settings
+from .models.user import User
 # 导入所有业务路由
-from app.api.routes import jd, resume, match, interview, application
+from .api.routes import jd, resume, match, interview, application
 
 
 @asynccontextmanager
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
             default_user = User(id=settings.default_user_id, name="默认用户")
             db.add(default_user)
             db.commit()
-            print("✅ 默认用户已创建")
+            print("[OK] 默认用户已创建")
     finally:
         db.close()
     
