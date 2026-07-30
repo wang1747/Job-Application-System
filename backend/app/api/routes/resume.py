@@ -6,6 +6,9 @@ from typing import Optional
 from app.core.database import get_db
 from app.services.resume_service import list_resumes, upload_resume
 from app.agents.tools.resume_parser import parse_resume_bytes
+from app.agents.graphs.resume_optimize import optimize_resume
+from app.models.resume import Resume
+from app.config import get_settings
 
 router = APIRouter()
 
@@ -63,6 +66,42 @@ async def upload_resume_file(
             "id": resume.id,
             "version": resume.version,
             "filename": file.filename
+        },
+        "error": None
+    }
+
+
+class ResumeOptimizeRequest(BaseModel):
+    resume_id: str
+    jd_text: str
+
+
+@router.post("/optimize")
+async def optimize_resume_endpoint(
+    req: ResumeOptimizeRequest,
+    db: Session = Depends(get_db)
+):
+    """针对 JD 优化简历"""
+    # 获取简历
+    resume = db.query(Resume).filter(
+        Resume.id == req.resume_id,
+        Resume.user_id == get_settings().default_user_id
+    ).first()
+    
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+    
+    # 执行优化
+    result = await optimize_resume(resume.raw_text, req.jd_text)
+    
+    if result.get("error"):
+        return {"success": False, "data": None, "error": result["error"]}
+    
+    return {
+        "success": True,
+        "data": {
+            "optimized": result.get("optimized"),
+            "changes": result.get("changes")
         },
         "error": None
     }
