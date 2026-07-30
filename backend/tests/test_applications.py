@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 from app.models.application import Application, ApplicationEvent
 
 
@@ -32,6 +33,7 @@ def test_application_event(db_session):
         from_status="saved",
         to_status="applied",
         description="Submitted application",
+        event_date=datetime.now(),
     )
     db_session.add(event)
     db_session.commit()

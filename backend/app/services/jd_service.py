@@ -1,4 +1,4 @@
-from typing import Optional
+﻿from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -8,7 +8,6 @@ from app.agents.graphs.jd_analysis import analyze_jd
 
 
 async def parse_and_save(raw_text: str, db: Session) -> dict:
-    """解析 JD 文本并存入数据库"""
     settings = get_settings()
     result = await analyze_jd(raw_text)
     if result.get("error"):
@@ -32,7 +31,6 @@ async def parse_and_save(raw_text: str, db: Session) -> dict:
 
 
 def list_jds(db: Session) -> list:
-    """获取当前用户的 JD 列表"""
     settings = get_settings()
     return db.query(JobDescription).filter(
         JobDescription.user_id == settings.default_user_id
@@ -40,7 +38,6 @@ def list_jds(db: Session) -> list:
 
 
 def delete_jd(jd_id: str, db: Session) -> bool:
-    """删除指定 JD"""
     settings = get_settings()
     jd = db.query(JobDescription).filter(
         JobDescription.id == jd_id,

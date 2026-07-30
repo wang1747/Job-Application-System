@@ -1,8 +1,13 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from fastapi.testclient import TestClient
+from app.main import app
 
 from app.core.database import Base
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture
@@ -27,3 +32,8 @@ def sample_jd_text() -> str:
 @pytest.fixture
 def sample_resume_text() -> str:
     return "John Doe, CS Master, 5 years Python experience, familiar with Django and FastAPI."
+
+@pytest.fixture
+def client():
+    """FastAPI TestClient 实例"""
+    return TestClient(app)

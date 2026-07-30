@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 
 from sqlalchemy import Column, String, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
@@ -38,5 +38,5 @@ class InterviewQuestion(Base):
     difficulty = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
-    article = relationship("InterviewArticle")
+    article = relationship("InterviewArticle", overlaps="question_list")
     user = relationship("User")

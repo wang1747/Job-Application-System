@@ -17,10 +17,9 @@ def test_jd_model_creation(db_session):
     assert jd.position == "Engineer"
 
 
-@pytest.mark.asyncio
-async def test_jd_parse_api(client, sample_jd_text):
+def test_jd_parse_api(client, sample_jd_text):
     """测试 JD 解析 API"""
-    response = await client.post("/api/v1/jd/parse", json={"raw_text": sample_jd_text})
+    response = client.post("/api/v1/jd/parse", json={"raw_text": sample_jd_text})
     assert response.status_code == 200
     data = response.json()
     assert "success" in data

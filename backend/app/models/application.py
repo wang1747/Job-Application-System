@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 
 from sqlalchemy import Column, String, DateTime, Text, Date, ForeignKey
 from sqlalchemy.orm import relationship
@@ -44,4 +44,4 @@ class ApplicationEvent(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     # ORM关联
-    application = relationship("Application")
+    application = relationship("Application", overlaps="events")

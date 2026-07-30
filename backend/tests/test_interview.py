@@ -36,6 +36,7 @@ def test_article_question_relation(db_session):
     article = InterviewArticle(
         user_id="test_user",
         company="TestCorp",
+        position="Backend",
         raw_content="Some content",
         source="manual",
     )
