@@ -2,14 +2,23 @@ import logging
 from typing import Optional, Literal
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.services.interview_service import (
-    import_article, list_articles, delete_article, get_questions,
-    create_interview_session, submit_interview_answer, get_interview_session, get_interview_summary,
-    save_generated_questions
+    create_interview_session,
+    delete_article,
+    extract_article_metadata,
+    extract_questions_from_article,
+    get_interview_session,
+    get_interview_summary,
+    get_questions,
+    import_article,
+    list_articles,
+    save_generated_questions,
+    submit_interview_answer,
 )
+from app.agents.tools.document_parser import parse_article_file
 
 from app.core.database import get_db
 from app.config import get_settings
@@ -82,14 +91,71 @@ async def import_article_endpoint(
     db: Session = Depends(get_db)
 ):
     """导入面经文章"""
-    article = import_article(
+    article, duplicate = import_article(
         company=req.company,
         position=req.position,
         raw_content=req.raw_content,
         source=req.source,
         db=db
     )
-    return {"success": True, "data": {"id": article.id}, "error": None}
+    metadata = extract_article_metadata(req.raw_content)
+    article.questions = metadata["questions"]
+    article.tags = metadata["tags"]
+    article.difficulty = metadata["difficulty"]
+    db.commit()
+    db.refresh(article)
+    saved = extract_questions_from_article(article.id, db) if metadata["questions"] else []
+    return {
+        "success": True,
+        "data": {
+            "id": article.id,
+            "duplicate": duplicate,
+            "questions": metadata["questions"],
+            "question_count": len(saved),
+            "tags": metadata["tags"],
+            "difficulty": metadata["difficulty"],
+        },
+        "error": None,
+    }
+
+
+@router.post("/articles/upload", summary="导入面经文件", tags=["面试面经模块"])
+async def upload_article_file(
+    file: UploadFile = File(...),
+    company: str = File(...),
+    position: Optional[str] = File(None),
+    db: Session = Depends(get_db)
+):
+    """上传面经文件（PDF/Markdown/HTML/TXT）"""
+    content = await file.read()
+    try:
+        raw_content = parse_article_file(file.filename, content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    article, duplicate = import_article(
+        company=company,
+        position=position,
+        raw_content=raw_content,
+        source="file",
+        db=db
+    )
+    metadata = extract_article_metadata(raw_content)
+    article.questions = metadata["questions"]
+    article.tags = metadata["tags"]
+    article.difficulty = metadata["difficulty"]
+    db.commit()
+    db.refresh(article)
+    saved = extract_questions_from_article(article.id, db) if metadata["questions"] else []
+    return {
+        "success": True,
+        "data": {
+            "id": article.id,
+            "duplicate": duplicate,
+            "filename": file.filename,
+            "question_count": len(saved),
+        },
+        "error": None,
+    }
 
 
 @router.get("/articles", summary="获取面经列表", tags=["面试面经模块"])

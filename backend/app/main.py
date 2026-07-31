@@ -24,6 +24,13 @@ async def lifespan(app: FastAPI):
             db.add(default_user)
             db.commit()
             print("[OK] 默认用户已创建")
+
+        try:
+            from app.seed import seed_demo_data
+            seed_demo_data(db)
+        except Exception as e:
+            print(f"⚠️ 种子数据生成失败: {e}")
+            
     finally:
         db.close()
     

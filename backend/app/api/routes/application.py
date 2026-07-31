@@ -1,15 +1,22 @@
+from datetime import date, datetime
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
-from datetime import datetime, date
-from app.services.reminder_service import get_reminders, get_company_interview_articles
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.application_service import (
-    create_application, list_applications, get_application,
-    update_application_status, delete_application, get_statistics
+    add_event,
+    create_application,
+    delete_application,
+    get_application,
+    get_statistics,
+    list_applications,
+    update_application,
+    update_application_status,
 )
+from app.services.reminder_service import get_company_interview_articles, get_reminders
 
 router = APIRouter()
 
@@ -21,8 +28,25 @@ class CreateApplicationRequest(BaseModel):
     resume_id: Optional[str] = None
 
 
+class UpdateApplicationRequest(BaseModel):
+    status: Optional[
+        Literal["saved", "applied", "online_test", "first_interview", "second_interview", "hr_round", "offered", "accepted", "rejected"]
+    ] = None
+    applied_date: Optional[date] = None
+    next_action: Optional[str] = None
+    next_action_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
 class UpdateStatusRequest(BaseModel):
     status: Literal["saved", "applied", "online_test", "first_interview", "second_interview", "hr_round", "offered", "accepted", "rejected"] = Field(...)
+
+
+class EventCreateRequest(BaseModel):
+    event_type: str = Field(..., min_length=1)
+    from_status: Optional[str] = None
+    to_status: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ApplicationOut(BaseModel):
@@ -81,6 +105,60 @@ async def get_statistics_endpoint(
     return {"success": True, "data": stats, "error": None}
 
 
+@router.get("/reminders")
+async def get_reminders_endpoint(
+    db: Session = Depends(get_db)
+):
+    """获取提醒汇总（超期跟进 + 即将到来的面试）"""
+    reminders = get_reminders(db)
+    return {"success": True, "data": reminders, "error": None}
+
+
+@router.post("/{app_id}/events")
+async def add_event_endpoint(
+    app_id: str,
+    req: EventCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """添加投递事件"""
+    event = add_event(
+        application_id=app_id,
+        event_type=req.event_type,
+        from_status=req.from_status,
+        to_status=req.to_status,
+        description=req.description,
+        db=db
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    return {
+        "success": True,
+        "data": {
+            "id": event.id,
+            "event_type": event.event_type,
+            "from_status": event.from_status,
+            "to_status": event.to_status,
+            "description": event.description,
+            "event_date": event.event_date,
+        },
+        "error": None,
+    }
+
+
+@router.get("/{app_id}/interview-articles")
+async def get_interview_articles_for_application(
+    app_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取某投递对应的公司面经（面试前推送）"""
+    app = get_application(app_id, db)
+    if not app:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+
+    articles = get_company_interview_articles(app.company, db)
+    return {"success": True, "data": articles, "error": None}
+
+
 @router.get("/{app_id}")
 async def get_application_endpoint(
     app_id: str,
@@ -91,6 +169,41 @@ async def get_application_endpoint(
     if not app:
         raise HTTPException(status_code=404, detail="投递记录不存在")
     return {"success": True, "data": ApplicationOut.model_validate(app), "error": None}
+
+
+@router.put("/{app_id}")
+async def update_application_endpoint(
+    app_id: str,
+    req: UpdateApplicationRequest,
+    db: Session = Depends(get_db)
+):
+    """更新投递记录（状态/日期/下一步行动/备注）"""
+    try:
+        app = update_application(
+            app_id=app_id,
+            db=db,
+            status=req.status,
+            applied_date=req.applied_date,
+            next_action=req.next_action,
+            next_action_date=req.next_action_date,
+            notes=req.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not app:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    return {"success": True, "data": ApplicationOut.model_validate(app), "error": None}
+
+
+@router.delete("/{app_id}")
+async def delete_application_endpoint(
+    app_id: str,
+    db: Session = Depends(get_db)
+):
+    """删除投递记录"""
+    if not delete_application(app_id, db):
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    return {"success": True, "data": None, "error": None}
 
 
 @router.put("/{app_id}/status")
@@ -107,37 +220,3 @@ async def update_status_endpoint(
     if not app:
         raise HTTPException(status_code=404, detail="投递记录不存在")
     return {"success": True, "data": {"id": app.id, "status": app.status}, "error": None}
-
-
-@router.delete("/{app_id}")
-async def delete_application_endpoint(
-    app_id: str,
-    db: Session = Depends(get_db)
-):
-    """删除投递记录"""
-    if not delete_application(app_id, db):
-        raise HTTPException(status_code=404, detail="投递记录不存在")
-    return {"success": True, "data": None, "error": None}
-
-@router.get("/reminders")
-async def get_reminders_endpoint(
-    db: Session = Depends(get_db)
-):
-    """获取提醒汇总（超期跟进 + 即将到来的面试）"""
-    reminders = get_reminders(db)
-    return {"success": True, "data": reminders, "error": None}
-
-
-@router.get("/{app_id}/interview-articles")
-async def get_interview_articles_for_application(
-    app_id: str,
-    db: Session = Depends(get_db)
-):
-    """获取某投递对应的公司面经（面试前推送）"""
-    from app.services.application_service import get_application
-    app = get_application(app_id, db)
-    if not app:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
-    
-    articles = get_company_interview_articles(app.company, db)
-    return {"success": True, "data": articles, "error": None}

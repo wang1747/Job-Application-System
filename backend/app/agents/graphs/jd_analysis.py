@@ -7,6 +7,15 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.llm import get_llm
 
 
+def _clean_json_response(raw: str) -> str:
+    """清洗 LLM 输出的 JSON 字符串"""
+    import re
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"^```\s*", "", raw)
+    raw = re.sub(r"```$", "", raw)
+    return raw.strip()
+
+
 class JDState(TypedDict):
     raw_text: str
     parsed: dict
@@ -44,7 +53,7 @@ def parse_jd_node(state: JDState) -> JDState:
             SystemMessage(content=system_prompt),
             HumanMessage(content=raw_text),
         ])
-        parsed = json.loads(response.content)
+        parsed = json.loads(_clean_json_response(response.content))
         return {"raw_text": state["raw_text"], "parsed": parsed, "error": ""}
     except Exception as e:
         return {"raw_text": state["raw_text"], "parsed": {}, "error": str(e)}

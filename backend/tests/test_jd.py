@@ -22,7 +22,10 @@ def test_jd_parse_api(client, sample_jd_text):
     response = client.post("/api/v1/jd/parse", json={"raw_text": sample_jd_text})
     assert response.status_code == 200
     data = response.json()
-    assert "success" in data
+    assert data["success"] is True
+    parsed = data["data"]["parsed"]
+    assert parsed["company"] == "ByteDance"
+    assert "Python" in parsed["must_have"]
 
 
 def test_jd_list_empty(db_session):

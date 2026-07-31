@@ -7,7 +7,9 @@ from app.core.database import get_db
 from app.services.resume_service import list_resumes, upload_resume
 from app.agents.tools.resume_parser import parse_resume_bytes
 from app.agents.graphs.resume_optimize import optimize_resume
+from app.agents.tools.ats_checker import check_ats_compatibility
 from app.models.resume import Resume
+from app.services.resume_service import get_resume_versions, save_optimized_version
 from app.config import get_settings
 
 router = APIRouter()
@@ -71,6 +73,32 @@ async def upload_resume_file(
     }
 
 
+@router.get("/{resume_id}/versions")
+async def get_resume_versions_endpoint(
+    resume_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取简历版本历史"""
+    versions = get_resume_versions(resume_id, db)
+    if versions is None:
+        raise HTTPException(status_code=404, detail="简历不存在")
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": v.id,
+                "version": v.version,
+                "raw_text": v.raw_text,
+                "source_file": v.source_file,
+                "parsed_json": v.parsed_json,
+                "created_at": v.created_at,
+            }
+            for v in versions
+        ],
+        "error": None,
+    }
+
+
 class ResumeOptimizeRequest(BaseModel):
     resume_id: str
     jd_text: str
@@ -96,12 +124,24 @@ async def optimize_resume_endpoint(
     
     if result.get("error"):
         return {"success": False, "data": None, "error": result["error"]}
+
+    optimized = result.get("optimized", "")
+    changes = result.get("changes", [])
+    new_version = None
+    if optimized and optimized.strip():
+        new_version = save_optimized_version(req.resume_id, optimized, changes, db)
     
     return {
         "success": True,
         "data": {
-            "optimized": result.get("optimized"),
-            "changes": result.get("changes")
+            "optimized": optimized,
+            "changes": changes,
+            "ats": check_ats_compatibility(resume.raw_text, req.jd_text),
+            "ats_after": check_ats_compatibility(optimized, req.jd_text),
+            "new_version": {
+                "id": new_version.id,
+                "version": new_version.version,
+            } if new_version else None,
         },
         "error": None
     }

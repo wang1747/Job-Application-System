@@ -1,135 +1,253 @@
-import { type FC, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import type { JDParseResult, JDItem } from "../types";
+import type { JDItem } from "../types";
 
-const JDAnalysis: FC = () => {
+interface ParsedResult {
+  company?: string;
+  position?: string;
+  must_have: string[];
+  nice_to_have: string[];
+  tech_stack: Record<string, string[]>;
+  hidden_signals: string[];
+}
+
+// 时间格式化工具
+const formatTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+};
+
+export default function JDAnalysis() {
   const [rawText, setRawText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<JDParseResult | null>(null);
-  const [list, setList] = useState<JDItem[]>([]);
+  const [result, setResult] = useState<ParsedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<JDItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!rawText.trim()) return;
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const resp = await api.jd.list();
+      if (resp.success && resp.data) {
+        setHistory(resp.data);
+      }
+    } catch (err) {
+      console.error("加载历史列表失败:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initialLoad = async () => {
+      await loadHistory();
+    };
+    initialLoad();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+    };
+  }, []);
+
+  const showError = (msg: string) => {
+    setError(msg);
+    if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+    const timer = setTimeout(() => setError(null), 5000);
+    autoCloseTimer.current = timer;
+  };
+
+  const handleParse = async () => {
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+      showError("请输入 JD 文本");
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    const res = await api.jd.parse(rawText);
-    if (res.success && res.data) {
-      setResult(res.data.parsed);
-      loadList();
-    } else {
-      setError(res.error || "解析失败");
+    setResult(null);
+
+    try {
+      const response = await api.jd.parse(trimmed);
+      if (response.success && response.data?.parsed) {
+        const parsed = response.data.parsed;
+        // 检查是否为空对象
+        if (Object.keys(parsed).length === 0) {
+          showError("解析结果为空，请检查 JD 文本内容");
+          setResult(null);
+        } else {
+          setResult(parsed);
+        }
+        await loadHistory();
+        setRawText("");
+      } else {
+        showError(response.error || "解析失败");
+      }
+    } catch (err) {
+      console.error("解析失败:", err);
+      showError("请求失败，请确保后端服务已启动");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const loadList = async () => {
-    const res = await api.jd.list();
-    if (res.success && res.data) setList(res.data);
+  const handleDelete = async (id: string) => {
+    if (!confirm("确定要删除这条 JD 吗？")) return;
+    try {
+      await api.jd.delete(id);
+      await loadHistory();
+    } catch (err) {
+      console.error("删除失败:", err);
+      showError("删除失败，请重试");
+    }
   };
+
+  const handleSelectHistory = (item: JDItem) => {
+    setRawText(item.raw_text || "");
+    setResult(null);
+    setError(null);
+  };
+
+  const closeResult = () => {
+    setResult(null);
+  };
+
+  // 渲染技术栈
+  const renderTechStack = (techStack: Record<string, string[]>) => {
+    if (!techStack || Object.keys(techStack).length === 0) {
+      return <span className="text-gray-400">无</span>;
+    }
+    return (
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(techStack).map(([key, values]) => (
+          values && values.length > 0 && (
+            <span key={key} className="bg-gray-100 px-2 py-1 rounded text-xs">
+              <span className="font-medium">{key}:</span> {values.join(", ")}
+            </span>
+          )
+        ))}
+      </div>
+    );
+  };
+
+  const hasResultData = result && Object.keys(result).length > 0;
 
   return (
-    <div>
-      <h1 style={{ fontSize: 24, fontWeight: 600, margin: "0 0 24px" }}>JD 解析</h1>
+    <div className="max-w-5xl mx-auto p-4 sm:p-6">
+      <h1 className="text-2xl font-bold mb-6">JD 智能解析</h1>
 
-      <form onSubmit={handleSubmit} style={{ marginBottom: 24 }}>
+      {/* 输入区 */}
+      <div className="mb-4">
         <textarea
+          className="w-full h-48 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          placeholder="粘贴职位描述 (JD) 文本..."
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          placeholder="粘贴 JD 文本..."
-          rows={6}
-          style={{
-            width: "100%",
-            padding: 12,
-            borderRadius: 8,
-            border: "1px solid #d1d5db",
-            fontSize: 14,
-            resize: "vertical",
-            boxSizing: "border-box",
-          }}
-        />
-        <button
-          type="submit"
           disabled={loading}
-          style={{
-            marginTop: 12,
-            padding: "10px 24px",
-            background: "#3b82f6",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            fontSize: 14,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? "解析中..." : "解析"}
-        </button>
-      </form>
+          aria-label="JD 文本输入"
+        />
+      </div>
 
+      <button
+        onClick={handleParse}
+        disabled={loading || !rawText.trim()}
+        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+        aria-label="开始解析 JD"
+      >
+        {loading ? "解析中..." : "开始解析"}
+      </button>
+
+      {/* 错误提示 */}
       {error && (
-        <div style={{ color: "#dc2626", fontSize: 14, marginBottom: 16 }}>{error}</div>
-      )}
-
-      {result && (
-        <div style={{ background: "#fff", borderRadius: 8, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.1)", marginBottom: 24 }}>
-          <h2 style={{ fontSize: 18, margin: "0 0 16px" }}>解析结果</h2>
-          {result.company && <div style={{ marginBottom: 8 }}><strong>公司：</strong>{result.company}</div>}
-          {result.position && <div style={{ marginBottom: 8 }}><strong>岗位：</strong>{result.position}</div>}
-          {result.must_have.length > 0 && (
-            <div style={{ marginBottom: 8 }}>
-              <strong>硬性要求：</strong>
-              <ul style={{ margin: "4px 0 0", paddingLeft: 20 }}>
-                {result.must_have.map((item, i) => <li key={i} style={{ fontSize: 13 }}>{item}</li>)}
-              </ul>
-            </div>
-          )}
-          {result.tech_stack && Object.entries(result.tech_stack).filter(([, v]) => v.length > 0).length > 0 && (
-            <div>
-              <strong>技术栈：</strong>
-              {Object.entries(result.tech_stack).map(([k, v]) =>
-                v.length > 0 ? (
-                  <div key={k} style={{ fontSize: 13, marginTop: 4 }}>
-                    {k}: {v.join(", ")}
-                  </div>
-                ) : null
-              )}
-            </div>
-          )}
+        <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex justify-between items-center">
+          <span>⚠️ {error}</span>
+          <button
+            className="text-sm underline"
+            onClick={() => setError(null)}
+            aria-label="关闭错误提示"
+          >
+            关闭
+          </button>
         </div>
       )}
 
-      <div>
-        <h2 style={{ fontSize: 18, margin: "0 0 12px" }}>历史记录</h2>
-        {list.length === 0 ? (
-          <div style={{ color: "#999", fontSize: 14 }}>暂无记录</div>
+      {/* 解析结果 */}
+      {hasResultData && (
+        <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="text-xl font-semibold text-green-800">✅ 解析结果</h2>
+            <button
+              onClick={closeResult}
+              className="text-gray-400 hover:text-gray-600 text-sm"
+              aria-label="关闭结果"
+            >
+              ✕ 关闭
+            </button>
+          </div>
+          <div className="space-y-3 text-sm">
+            <div><span className="font-medium">公司：</span>{result.company || "-"}</div>
+            <div><span className="font-medium">职位：</span>{result.position || "-"}</div>
+            <div>
+              <span className="font-medium">硬性要求：</span>
+              <ul className="list-disc list-inside ml-4">
+                {result.must_have?.length ? result.must_have.map((item, idx) => <li key={idx}>{item}</li>) : <li>无</li>}
+              </ul>
+            </div>
+            <div>
+              <span className="font-medium">加分项：</span>
+              <ul className="list-disc list-inside ml-4">
+                {result.nice_to_have?.length ? result.nice_to_have.map((item, idx) => <li key={idx}>{item}</li>) : <li>无</li>}
+              </ul>
+            </div>
+            <div>
+              <span className="font-medium">技术栈：</span>
+              {renderTechStack(result.tech_stack)}
+            </div>
+            {result.hidden_signals?.length > 0 && (
+              <div>
+                <span className="font-medium">隐藏信号：</span>
+                <ul className="list-disc list-inside ml-4">
+                  {result.hidden_signals.map((item, idx) => <li key={idx}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 历史列表 */}
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-3">📋 历史记录</h2>
+        {historyLoading ? (
+          <div className="text-gray-500 text-sm">加载中...</div>
+        ) : history.length === 0 ? (
+          <div className="text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg p-6 text-center">
+            暂无 JD 记录，快来解析第一条吧！
+          </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {list.map((item) => (
-              <div key={item.id} style={{
-                background: "#fff",
-                borderRadius: 8,
-                padding: "12px 16px",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}>
-                <div>
-                  <strong>{item.company || "未知公司"}</strong> - {item.position || "未知岗位"}
+          <div className="space-y-2">
+            {history.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition cursor-pointer border border-transparent"
+                onClick={() => handleSelectHistory(item)}
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium">{item.company || "未知公司"}</span>
+                  <span className="text-gray-500 mx-2">·</span>
+                  <span>{item.position || "未知职位"}</span>
+                  <span className="text-gray-400 text-xs ml-3 hidden sm:inline">
+                    {formatTime(item.created_at || "")}
+                  </span>
                 </div>
                 <button
-                  onClick={() => api.jd.delete(item.id).then(loadList)}
-                  style={{
-                    padding: "4px 12px",
-                    background: "#fee2e2",
-                    color: "#dc2626",
-                    border: "none",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                  className="text-red-500 hover:text-red-700 text-sm px-2 flex-shrink-0"
+                  aria-label={`删除 ${item.company || "未知"} 的 JD`}
                 >
                   删除
                 </button>
@@ -140,6 +258,4 @@ const JDAnalysis: FC = () => {
       </div>
     </div>
   );
-};
-
-export default JDAnalysis;
+}

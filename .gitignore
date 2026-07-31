@@ -9,3 +9,12 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Test artifacts
+.pytest_cache/
+
+# Vector database
+chroma_db/
+
+# Database backups
+*.db.bak

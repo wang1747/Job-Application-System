@@ -24,9 +24,6 @@ EVALUATOR_PROMPT = """你是资深面试官，请给出专业反馈。
 
 只输出反馈内容，不要有其他文字。"""
 
-llm = get_llm()
-
-
 def _clean_text(text: str) -> str:
     """清洗 LLM 输出"""
     if not text:
@@ -67,7 +64,7 @@ def generate_interview_summary(
     prompt = "整场模拟面试记录：\n" + "\n".join(conversation)
 
     try:
-        response = llm.invoke([
+        response = get_llm().invoke([
             SystemMessage(content=SUMMARIZER_PROMPT),
             HumanMessage(content=prompt),
         ])
@@ -94,7 +91,7 @@ def generate_question(
     prompt += "\n\n只输出问题内容，不要有其他文字。"
 
     try:
-        response = llm.invoke([
+        response = get_llm().invoke([
             SystemMessage(content=INTERVIEWER_PROMPT),
             HumanMessage(content=prompt),
         ])
@@ -113,7 +110,7 @@ def evaluate_answer(question: str, answer: str) -> str:
 请给出专业、简洁的反馈（50字以内），包括优点和改进建议。"""
 
     try:
-        response = llm.invoke([
+        response = get_llm().invoke([
             SystemMessage(content=EVALUATOR_PROMPT),
             HumanMessage(content=prompt),
         ])

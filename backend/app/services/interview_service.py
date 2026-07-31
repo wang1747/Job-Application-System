@@ -1,4 +1,7 @@
 import logging
+import difflib
+import json
+import re
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -18,15 +21,33 @@ logger = logging.getLogger(__name__)
 _ARTICLE_SORT_FIELDS = {"created_at", "company", "position"}
 
 
+def _find_duplicate(raw_content: str, db: Session) -> Optional[InterviewArticle]:
+    """按规范化文本相似度查找重复面经（相似度 >= 0.9 视为重复）"""
+    settings = get_settings()
+    normalized = re.sub(r"\s+", "", raw_content or "").lower()
+    articles = db.query(InterviewArticle).filter(
+        InterviewArticle.user_id == settings.default_user_id
+    ).all()
+    for article in articles:
+        existing = re.sub(r"\s+", "", article.raw_content or "").lower()
+        if normalized and existing and difflib.SequenceMatcher(None, normalized, existing).ratio() >= 0.9:
+            return article
+    return None
+
+
 def import_article(
     company: str,
     raw_content: str,
     db: Session,
     position: Optional[str] = None,
     source: str = "manual"
-) -> InterviewArticle:
-    """导入面经文章"""
+) -> Tuple[InterviewArticle, bool]:
+    """导入面经文章；返回 (文章, 是否重复)"""
     settings = get_settings()
+    duplicate = _find_duplicate(raw_content, db)
+    if duplicate:
+        return duplicate, True
+
     article = InterviewArticle(
         user_id=settings.default_user_id,
         company=company,
@@ -37,7 +58,7 @@ def import_article(
     db.add(article)
     db.commit()
     db.refresh(article)
-    return article
+    return article, False
 
 
 def list_articles(
@@ -114,8 +135,75 @@ def get_questions(
 
 
 def extract_questions_from_article(article_id: str, db: Session) -> list:
-    """从面经中提取题目（占位，后续接入LLM）"""
-    return []
+    """把面经中已提取的题目落库为面试题记录"""
+    settings = get_settings()
+    article = db.query(InterviewArticle).filter(
+        InterviewArticle.id == article_id,
+        InterviewArticle.user_id == settings.default_user_id
+    ).first()
+    if not article or not article.questions:
+        return []
+
+    saved = []
+    for item in article.questions:
+        if isinstance(item, str):
+            question_text = item
+            category = None
+        else:
+            question_text = item.get("question", "") if isinstance(item, dict) else ""
+            category = item.get("category") if isinstance(item, dict) else None
+        if not question_text:
+            continue
+        exists = db.query(InterviewQuestion).filter(
+            InterviewQuestion.user_id == settings.default_user_id,
+            InterviewQuestion.question == question_text
+        ).first()
+        if exists:
+            continue
+        question = InterviewQuestion(
+            user_id=settings.default_user_id,
+            article_id=article_id,
+            question=question_text,
+            category=category,
+            difficulty=article.difficulty,
+        )
+        db.add(question)
+        saved.append(question)
+    db.commit()
+    return saved
+
+
+def _clean_json_response(raw: str) -> str:
+    """清洗 LLM 输出的 JSON 字符串"""
+    raw = re.sub(r"^```json\s*", "", raw.strip())
+    raw = re.sub(r"^```\s*", "", raw)
+    raw = re.sub(r"```$", "", raw)
+    return raw.strip()
+
+
+def extract_article_metadata(raw_content: str) -> dict:
+    """用 LLM 从面经中提取题目、标签和难度；失败时返回空结果"""
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from app.core.llm import get_llm
+
+    system_prompt = (
+        "你是面经整理助手。从面经内容中提取结构化信息，只输出 JSON：\n"
+        '{"questions": ["面试问题1", "面试问题2"], "tags": ["算法", "系统设计"], "difficulty": "简单|中等|困难"}\n'
+        "提取不到时用空数组，难度无法判断时为 null。"
+    )
+    try:
+        response = get_llm().invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=raw_content or ""),
+        ])
+        parsed = json.loads(_clean_json_response(response.content))
+        return {
+            "questions": parsed.get("questions", []) if isinstance(parsed.get("questions"), list) else [],
+            "tags": parsed.get("tags", []) if isinstance(parsed.get("tags"), list) else [],
+            "difficulty": parsed.get("difficulty"),
+        }
+    except Exception:
+        return {"questions": [], "tags": [], "difficulty": None}
 
 
 def save_generated_questions(

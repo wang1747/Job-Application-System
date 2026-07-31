@@ -1,5 +1,10 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DB_PATH = PROJECT_ROOT / "offerflow.db"
 
 
 class Settings(BaseSettings):
@@ -9,7 +14,7 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-chat"
 
     # 数据库
-    database_url: str = "sqlite:///./offerflow.db"
+    database_url: str = f"sqlite:///{DB_PATH.as_posix()}"
 
     # 向量库 ChromaDB 持久化路径
     chroma_persist_path: str = "./chroma_db"
@@ -17,9 +22,10 @@ class Settings(BaseSettings):
     # 默认用户
     default_user_id: str = "default"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env",
+        env_file_encoding="utf-8",
+    )
 
 
 @lru_cache

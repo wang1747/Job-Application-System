@@ -8,6 +8,7 @@ interface SidebarProps {
 const navItems = [
   { key: "dashboard", label: "总览" },
   { key: "jd", label: "JD 解析" },
+  { key: "match", label: "匹配分析" },
   { key: "resume", label: "简历优化" },
   { key: "interview", label: "面试准备" },
   { key: "applications", label: "投递追踪" },

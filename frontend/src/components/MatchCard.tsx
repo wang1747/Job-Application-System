@@ -31,10 +31,17 @@ const MatchCard: FC<MatchCardProps> = ({ result }) => {
       }}>
         {result.score}
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 14, color: "#666" }}>JD: {result.jd_id.slice(0, 8)}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "#333", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {result.company || `JD ${result.jd_id.slice(0, 8)}`}
+        </div>
+        {result.position && (
+          <div style={{ fontSize: 12, color: "#666", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {result.position}
+          </div>
+        )}
         {result.suggestion && (
-          <div style={{ fontSize: 12, color: "#999", marginTop: 4 }}>{result.suggestion}</div>
+          <div style={{ fontSize: 12, color: "#999", marginTop: 4, lineHeight: 1.4 }}>{result.suggestion}</div>
         )}
       </div>
     </div>

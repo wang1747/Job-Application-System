@@ -17,9 +17,6 @@ class ResumeState(TypedDict):
     error: str
 
 
-llm = get_llm()
-
-
 def optimize_node(state: ResumeState) -> ResumeState:
     """针对 JD 优化简历"""
     system_prompt = """你是一个简历优化专家。根据目标 JD 的要求，优化简历内容。
@@ -27,7 +24,7 @@ def optimize_node(state: ResumeState) -> ResumeState:
 输出格式：{"optimized": "优化后的简历文本", "changes": ["改动1", "改动2"]}"""
     prompt = f"【原始简历】\n{state['resume_text']}\n\n【目标JD】\n{state['jd_text']}"
     try:
-        response = llm.invoke([
+        response = get_llm().invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=prompt),
         ])

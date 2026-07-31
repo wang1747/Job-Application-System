@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
@@ -90,6 +90,46 @@ def update_application_status(app_id: str, new_status: str, db: Session) -> Opti
     )
     app.status = new_status
     db.add(event)
+    db.commit()
+    db.refresh(app)
+    return app
+
+
+def update_application(
+    app_id: str,
+    db: Session,
+    status: Optional[str] = None,
+    applied_date: Optional[date] = None,
+    next_action: Optional[str] = None,
+    next_action_date: Optional[date] = None,
+    notes: Optional[str] = None,
+) -> Optional[Application]:
+    """更新投递记录的可编辑字段，状态变更时写入事件"""
+    app = get_application(app_id, db)
+    if not app:
+        return None
+    if status is not None:
+        if status not in APPLICATION_STATUSES:
+            raise ValueError(f"无效状态: {status}")
+        if status != app.status:
+            event = ApplicationEvent(
+                application_id=app_id,
+                event_type="status_change",
+                from_status=app.status,
+                to_status=status,
+                description=f"状态变更: {app.status} → {status}",
+                event_date=datetime.now(),
+            )
+            db.add(event)
+            app.status = status
+    if applied_date is not None:
+        app.applied_date = applied_date
+    if next_action is not None:
+        app.next_action = next_action
+    if next_action_date is not None:
+        app.next_action_date = next_action_date
+    if notes is not None:
+        app.notes = notes
     db.commit()
     db.refresh(app)
     return app

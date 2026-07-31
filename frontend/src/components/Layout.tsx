@@ -1,14 +1,6 @@
 import { type FC, type ReactNode, useState } from "react";
 import Sidebar from "./Sidebar";
 
-const pages: Record<string, ReactNode> = {
-  dashboard: null,
-  jd: null,
-  resume: null,
-  interview: null,
-  applications: null,
-};
-
 interface LayoutProps {
   children: (page: string) => ReactNode;
 }

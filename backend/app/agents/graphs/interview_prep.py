@@ -10,8 +10,6 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.llm import get_llm
 
-llm = get_llm()
-
 logger = logging.getLogger(__name__)
 
 # System Prompt 常量
@@ -78,7 +76,7 @@ def generate_questions_node(state: InterviewState) -> InterviewState:
         prompt += f"\n\n请生成最多 {state['limit']} 道题目。"
 
     try:
-        response = llm.invoke([
+        response = get_llm().invoke([
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=prompt),
         ])
