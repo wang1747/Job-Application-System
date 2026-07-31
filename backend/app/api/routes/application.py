@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime, date
+from app.services.reminder_service import get_reminders, get_company_interview_articles
 
 from app.core.database import get_db
 from app.services.application_service import (
@@ -117,3 +118,26 @@ async def delete_application_endpoint(
     if not delete_application(app_id, db):
         raise HTTPException(status_code=404, detail="投递记录不存在")
     return {"success": True, "data": None, "error": None}
+
+@router.get("/reminders")
+async def get_reminders_endpoint(
+    db: Session = Depends(get_db)
+):
+    """获取提醒汇总（超期跟进 + 即将到来的面试）"""
+    reminders = get_reminders(db)
+    return {"success": True, "data": reminders, "error": None}
+
+
+@router.get("/{app_id}/interview-articles")
+async def get_interview_articles_for_application(
+    app_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取某投递对应的公司面经（面试前推送）"""
+    from app.services.application_service import get_application
+    app = get_application(app_id, db)
+    if not app:
+        raise HTTPException(status_code=404, detail="投递记录不存在")
+    
+    articles = get_company_interview_articles(app.company, db)
+    return {"success": True, "data": articles, "error": None}
