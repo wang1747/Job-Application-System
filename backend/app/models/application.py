@@ -28,7 +28,7 @@ class Application(Base):
     user = relationship("User")
     jd = relationship("JobDescription")
     resume = relationship("Resume")
-    events = relationship("ApplicationEvent")
+    events = relationship("ApplicationEvent", cascade="all, delete-orphan")
 
 
 class ApplicationEvent(Base):

@@ -40,3 +40,20 @@ class InterviewQuestion(Base):
 
     article = relationship("InterviewArticle", overlaps="question_list")
     user = relationship("User")
+
+class InterviewSession(Base):
+    __tablename__ = "interview_sessions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    resume_id = Column(String, nullable=False)
+    jd_id = Column(String, nullable=False)
+    status = Column(String, default="active")  # active | finished
+    questions = Column(JSON, default=list)     # 历史问题列表
+    answers = Column(JSON, default=list)       # 历史回答列表
+    feedbacks = Column(JSON, default=list)     # 历史反馈列表
+    current_question = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")

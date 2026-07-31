@@ -1,15 +1,43 @@
 from typing import Optional
 from datetime import datetime
-
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
 from app.models.application import Application, ApplicationEvent
+from app.models.jd import JobDescription
+from app.models.resume import Resume
+
+
+APPLICATION_STATUSES = [
+    "saved",
+    "applied",
+    "online_test",
+    "first_interview",
+    "second_interview",
+    "hr_round",
+    "offered",
+    "accepted",
+    "rejected",
+]
 
 
 def create_application(company: str, position: str, jd_id: Optional[str], resume_id: Optional[str], db: Session) -> Application:
     """创建投递记录"""
     settings = get_settings()
+    if jd_id:
+        jd = db.query(JobDescription).filter(
+            JobDescription.id == jd_id,
+            JobDescription.user_id == settings.default_user_id
+        ).first()
+        if not jd:
+            raise ValueError("JD不存在")
+    if resume_id:
+        resume = db.query(Resume).filter(
+            Resume.id == resume_id,
+            Resume.user_id == settings.default_user_id
+        ).first()
+        if not resume:
+            raise ValueError("简历不存在")
     app = Application(
         user_id=settings.default_user_id,
         company=company,
@@ -24,17 +52,66 @@ def create_application(company: str, position: str, jd_id: Optional[str], resume
     return app
 
 
-def list_applications(db: Session) -> list:
-    """获取投递列表"""
+def list_applications(db: Session, status: Optional[str] = None) -> list:
+    """获取投递列表（支持按状态筛选）"""
+    settings = get_settings()
+    query = db.query(Application).filter(
+        Application.user_id == settings.default_user_id
+    )
+    if status:
+        query = query.filter(Application.status == status)
+    return query.order_by(Application.updated_at.desc()).all()
+
+
+def get_application(app_id: str, db: Session) -> Optional[Application]:
+    """获取单个投递记录"""
     settings = get_settings()
     return db.query(Application).filter(
+        Application.id == app_id,
         Application.user_id == settings.default_user_id
-    ).order_by(Application.updated_at.desc()).all()
+    ).first()
+
+
+def update_application_status(app_id: str, new_status: str, db: Session) -> Optional[Application]:
+    """更新投递状态"""
+    app = get_application(app_id, db)
+    if not app:
+        return None
+    if new_status not in APPLICATION_STATUSES:
+        raise ValueError(f"无效状态: {new_status}")
+    old_status = app.status
+    event = ApplicationEvent(
+        application_id=app_id,
+        event_type="status_change",
+        from_status=old_status,
+        to_status=new_status,
+        description=f"状态变更: {old_status} → {new_status}",
+        event_date=datetime.now(),
+    )
+    app.status = new_status
+    db.add(event)
+    db.commit()
+    db.refresh(app)
+    return app
+
+
+def delete_application(app_id: str, db: Session) -> bool:
+    """删除投递记录"""
+    app = get_application(app_id, db)
+    if not app:
+        return False
+    db.delete(app)
+    db.commit()
+    return True
 
 
 def add_event(application_id: str, event_type: str, from_status: Optional[str], to_status: Optional[str], description: Optional[str], db: Session) -> Optional[ApplicationEvent]:
     """添加投递事件"""
-    app = db.query(Application).filter(Application.id == application_id).first()
+    settings = get_settings()
+    app = db.query(Application).filter(
+        Application.id == application_id,
+        Application.user_id == settings.default_user_id
+    ).first()
     if not app:
         return None
     event = ApplicationEvent(
@@ -51,3 +128,46 @@ def add_event(application_id: str, event_type: str, from_status: Optional[str], 
     db.commit()
     db.refresh(event)
     return event
+
+
+def get_statistics(db: Session) -> dict:
+    """获取投递统计数据"""
+    settings = get_settings()
+    apps = db.query(Application).options(
+        selectinload(Application.events)
+    ).filter(
+        Application.user_id == settings.default_user_id
+    ).all()
+    
+    total = len(apps)
+    status_counts = {status: 0 for status in APPLICATION_STATUSES}
+    for app in apps:
+        status_counts[app.status] = status_counts.get(app.status, 0) + 1
+    
+    return {
+        "total": total,
+        "status_counts": status_counts,
+        "status_order": APPLICATION_STATUSES,
+        "conversion_rate": {
+            "applied_to_interview": _calc_conversion(apps, "applied", "first_interview"),
+            "interview_to_offer": _calc_conversion(apps, "first_interview", "offered")
+        }
+    }
+
+
+def _calc_conversion(apps: list, from_status: str, to_status: str) -> float:
+    """计算转化率"""
+    from_count = sum(1 for a in apps if _reached_status(a, from_status))
+    to_count = sum(1 for a in apps if _reached_status(a, to_status))
+    if from_count == 0:
+        return 0.0
+    return round(to_count / from_count * 100, 1)
+
+
+def _reached_status(app: Application, status: str) -> bool:
+    """检查是否到达过某个状态（优先使用事件历史）"""
+    if app.events:
+        return any(event.to_status == status for event in app.events)
+    current_idx = APPLICATION_STATUSES.index(app.status) if app.status in APPLICATION_STATUSES else -1
+    target_idx = APPLICATION_STATUSES.index(status) if status in APPLICATION_STATUSES else -1
+    return current_idx >= target_idx
