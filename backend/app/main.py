@@ -2,19 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from .core.database import init_db, SessionLocal
 from .config import get_settings
+from .core.database import init_db, SessionLocal
 from .models.user import User
-# 导入所有业务路由
 from .api.routes import jd, resume, match, interview, application
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时执行
     init_db()
-    
-    # 创建默认用户
+
     settings = get_settings()
     db = SessionLocal()
     try:
@@ -30,29 +27,28 @@ async def lifespan(app: FastAPI):
             seed_demo_data(db)
         except Exception as e:
             print(f"[ERROR] 种子数据生成失败: {e}")
-            
     finally:
         db.close()
-    
+
     yield
 
 
 app = FastAPI(
     title="OfferFlow API",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS 开发配置
+settings = get_settings()
+allowed_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 注册所有业务接口路由
 app.include_router(jd.router, prefix="/api/v1/jd", tags=["JD解析模块"])
 app.include_router(resume.router, prefix="/api/v1/resume", tags=["简历模块"])
 app.include_router(match.router, prefix="/api/v1/match", tags=["匹配分析模块"])

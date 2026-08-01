@@ -1,0 +1,13 @@
+.env
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest-tmp/
+offerflow.db
+offerflow.db.bak
+chroma_db/
+node_modules/
+frontend/node_modules/
+frontend/dist/

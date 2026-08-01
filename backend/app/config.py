@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # 默认用户
     default_user_id: str = "default"
 
+    # CORS 配置
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1"
+
     @model_validator(mode="after")
     def _resolve_project_paths(self):
         if self.database_url.startswith("sqlite:///./"):
