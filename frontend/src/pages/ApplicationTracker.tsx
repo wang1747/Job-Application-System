@@ -301,7 +301,7 @@ const ApplicationTracker: FC = () => {
             <option value="">关联简历（可选）</option>
             {resumes.map((resume) => (
               <option key={resume.id} value={resume.id}>
-                v{resume.version} · {resume.source_file || "手动输入"}
+                {resume.source_file || "手动输入"}
               </option>
             ))}
           </select>

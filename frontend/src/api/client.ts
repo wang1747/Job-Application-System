@@ -15,7 +15,18 @@ import type {
   SimulateSession,
 } from "../types";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+const BASE_URL =
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:8001");
+
+const CONNECTION_ERROR_MESSAGE = "无法连接后端服务，请确认后端已启动";
+
+async function fetchResponse(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error(CONNECTION_ERROR_MESSAGE);
+  }
+}
 
 async function parseResponse<T>(res: Response): Promise<ApiResponse<T>> {
   const text = await res.text();
@@ -33,7 +44,7 @@ async function parseResponse<T>(res: Response): Promise<ApiResponse<T>> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchResponse(`${BASE_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -41,7 +52,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<ApiRespo
 }
 
 async function requestForm<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchResponse(`${BASE_URL}${path}`, {
     method: "POST",
     body: formData,
   });

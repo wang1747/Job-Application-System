@@ -127,13 +127,13 @@ const ResumeOptimize: FC = () => {
           <h2 className="text-lg font-semibold mb-3">上传简历</h2>
           <textarea
             className="w-full h-40 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="粘贴简历文本，或上传 PDF / Markdown / TXT 文件..."
+            placeholder="粘贴简历文本，或上传 PDF / Word / Markdown / TXT 文件..."
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
           <input
             type="file"
-            accept=".pdf,.md,.markdown,.txt"
+            accept=".pdf,.md,.markdown,.docx,.txt"
             onChange={handleFile}
             className="mt-3 block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-green-600 file:text-white"
           />
@@ -153,7 +153,7 @@ const ResumeOptimize: FC = () => {
             {resumes.length === 0 && <option value="">暂无简历</option>}
             {resumes.map((item) => (
               <option key={item.id} value={item.id}>
-                v{item.version} · {item.source_file || "手动输入"}
+                {item.source_file || "手动输入"}
               </option>
             ))}
           </select>
@@ -162,7 +162,6 @@ const ResumeOptimize: FC = () => {
               {versions.map((item) => (
                 <div key={item.id} className="p-2 bg-gray-50 rounded border border-gray-200 text-sm">
                   <div className="flex justify-between text-gray-600">
-                    <span>v{item.version}</span>
                     <span>{item.source_file || "手动输入"}</span>
                   </div>
                   {item.parsed_json?.kind === "optimized" && (
@@ -192,7 +191,6 @@ const ResumeOptimize: FC = () => {
 
           {selectedResume && (
             <div className="mt-4 text-sm text-gray-600">
-              当前版本：v{selectedResume.version}
               {selectedResume.parsed_json?.skills?.length ? (
                 <span> · 技能：{selectedResume.parsed_json.skills.join("、")}</span>
               ) : null}
@@ -228,7 +226,7 @@ const ResumeOptimize: FC = () => {
             />
             {result.new_version && (
               <div className="mt-3 text-sm text-gray-600">
-                已保存为 v{result.new_version.version}
+                已保存为新版本
               </div>
             )}
           </section>

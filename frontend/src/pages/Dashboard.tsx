@@ -34,13 +34,31 @@ const Dashboard: FC = () => {
   }, []);
 
   useEffect(() => {
-    api.health()
-      .then((res) => setHealth(res.data?.status || "未连接"))
-      .catch(() => setHealth("连接失败"));
-    const initialLoad = async () => {
-      await loadAll();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const checkHealth = async () => {
+      try {
+        const res = await api.health();
+        if (cancelled) return;
+        setHealth(res.data?.status || "未连接");
+        if (res.data?.status === "ok") {
+          await loadAll();
+        } else {
+          timer = setTimeout(checkHealth, 3000);
+        }
+      } catch {
+        if (cancelled) return;
+        setHealth("连接失败");
+        timer = setTimeout(checkHealth, 3000);
+      }
     };
-    initialLoad();
+
+    checkHealth();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [loadAll]);
 
   const offerCount =

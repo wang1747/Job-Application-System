@@ -62,4 +62,4 @@ app.include_router(application.router, prefix="/api/v1/applications", tags=["投
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "message": "OfferFlow is running"}
+    return {"success": True, "data": {"status": "ok", "message": "OfferFlow is running"}, "error": None}

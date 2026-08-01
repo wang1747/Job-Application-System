@@ -5,6 +5,7 @@ from io import BytesIO
 import PyPDF2
 import markdown
 from bs4 import BeautifulSoup
+from docx import Document
 
 
 def parse_pdf(file_path: str) -> str:
@@ -56,6 +57,21 @@ def parse_text(raw_text: str) -> str:
     return text.strip()
 
 
+def parse_docx_bytes(file_bytes: bytes) -> str:
+    """解析 .docx 字节流为纯文本（含段落和表格）"""
+    try:
+        document = Document(BytesIO(file_bytes))
+        lines = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    lines.append("\t".join(cells))
+        return parse_text("\n".join(lines))
+    except Exception as e:
+        raise ValueError(f"DOCX 解析失败: {e}")
+
+
 def parse_resume_file(file_path: str) -> str:
     """自动识别文件类型并解析简历"""
     if file_path.lower().endswith(".pdf"):
@@ -65,6 +81,9 @@ def parse_resume_file(file_path: str) -> str:
     elif file_path.lower().endswith(".txt"):
         with open(file_path, "r", encoding="utf-8") as f:
             return parse_text(f.read())
+    elif file_path.lower().endswith(".docx"):
+        with open(file_path, "rb") as f:
+            return parse_docx_bytes(f.read())
     else:
         raise ValueError(f"不支持的文件类型: {file_path}")
 
@@ -77,5 +96,7 @@ def parse_resume_bytes(filename: str, file_bytes: bytes) -> str:
         return parse_markdown_text(file_bytes.decode("utf-8"))
     elif filename.lower().endswith(".txt"):
         return parse_text(file_bytes.decode("utf-8"))
+    elif filename.lower().endswith(".docx"):
+        return parse_docx_bytes(file_bytes)
     else:
         raise ValueError(f"不支持的文件类型: {filename}")

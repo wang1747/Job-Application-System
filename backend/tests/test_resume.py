@@ -1,4 +1,7 @@
 import pytest
+from io import BytesIO
+from docx import Document
+
 from app.models.resume import Resume
 
 
@@ -42,3 +45,29 @@ def test_resume_versions_api(client):
     assert len(data) == 2
     assert data[0]["version"] == 2
     assert data[0]["parsed_json"]["skills"]
+
+
+def test_resume_upload_docx(client):
+    """测试 .docx 简历上传"""
+    doc = Document()
+    doc.add_paragraph("张三，5年Python开发经验，熟悉Django和FastAPI")
+    buffer = BytesIO()
+    doc.save(buffer)
+
+    response = client.post(
+        "/api/v1/resume/upload-file",
+        files={
+            "file": (
+                "resume.docx",
+                buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["filename"] == "resume.docx"
+
+    versions = client.get(f"/api/v1/resume/{data['id']}/versions")
+    assert versions.status_code == 200
+    assert "Django" in versions.json()["data"][0]["raw_text"]
