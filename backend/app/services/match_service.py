@@ -7,7 +7,9 @@ from app.config import get_settings
 from app.models.jd import JobDescription
 from app.models.match import MatchResult
 from app.models.resume import Resume
+from app.core.vector_store import get_vector_store, get_or_create_collection
 
+# ============ 本地技能词典匹配（保留作为降级方案） ============
 
 SKILL_ALIASES: Dict[str, List[str]] = {
     "Python": ["python", "python3", "py"],
@@ -85,6 +87,12 @@ def _skill_sources(jd: JobDescription, resume: Resume) -> tuple:
     return " ".join(jd_parts), " ".join(resume_parts)
 
 
+def _extract_skill_aliases(term: str) -> List[str]:
+    """返回某个技能词可能命中的别名"""
+    normalized = _normalize(term)
+    return [normalized] + [alias for aliases in SKILL_ALIASES.values() for alias in aliases if alias in normalized]
+
+
 def _persist_match(
     jd_id: str,
     resume_id: str,
@@ -121,8 +129,57 @@ def _persist_match(
     return match
 
 
+# ============ 语义匹配（ChromaDB 增强） ============
+
+def _get_embedding(text: str) -> List[float]:
+    """获取文本的 embedding"""
+    from app.core.llm import get_llm
+    llm = get_llm()
+    try:
+        # DeepSeek API 兼容 OpenAI embedding 接口
+        response = llm.embeddings.create(
+            model="text-embedding-ada-002",
+            input=text[:8000]  # 限制长度
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"⚠️ Embedding 获取失败: {e}")
+        return []
+
+
+def _semantic_score(jd_text: str, resume_text: str) -> int:
+    """使用 ChromaDB 计算语义相似度分数"""
+    try:
+        client = get_vector_store()
+        collection = get_or_create_collection(client, "jd_resume_matches")
+        
+        resume_embedding = _get_embedding(resume_text[:8000])
+        if not resume_embedding:
+            return 0
+        
+        results = collection.query(
+            query_embeddings=[resume_embedding],
+            n_results=5,
+        )
+        
+        if results["ids"] and len(results["ids"][0]) > 0:
+            distances = results["distances"][0] if results.get("distances") else []
+            if distances and distances[0] < 1.0:
+                # 距离越小相似度越高，映射到 0-100 分
+                return max(0, min(100, int((1.0 - distances[0]) * 100)))
+        return 0
+    except Exception as e:
+        print(f"⚠️ 语义匹配失败，使用本地匹配: {e}")
+        return 0
+
+
+# ============ 主匹配函数（混合方案） ============
+
 def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
-    """计算 JD 与简历的技能匹配度并持久化结果"""
+    """
+    计算 JD 与简历的匹配度
+    优先使用 ChromaDB 语义匹配，降级使用本地技能词典
+    """
     settings = get_settings()
     jd = db.query(JobDescription).filter(
         JobDescription.id == jd_id,
@@ -138,6 +195,8 @@ def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
         raise ValueError("简历不存在")
 
     jd_text, resume_text = _skill_sources(jd, resume)
+    
+    # 1. 本地技能词典匹配
     jd_skills = _extract_skills(jd_text)
     resume_skills = _extract_skills(resume_text)
 
@@ -150,17 +209,27 @@ def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
 
     hard_weight = 12
     nice_weight = 4
-    score = max(0, min(100, 100 - len(missing) * hard_weight - len(partial) * nice_weight))
+    local_score = max(0, min(100, 100 - len(missing) * hard_weight - len(partial) * nice_weight))
+    
+    # 2. 语义匹配（ChromaDB）
+    semantic_score = _semantic_score(jd_text, resume_text)
+    
+    # 3. 混合分数：语义匹配占 40%，本地匹配占 60%
+    if semantic_score > 0:
+        final_score = int(semantic_score * 0.4 + local_score * 0.6)
+    else:
+        final_score = local_score
+    
     suggestion = (
         "匹配度较高，可以直接投递。"
-        if score >= 80
+        if final_score >= 80
         else "建议补充缺失技能或相关项目经验后再投递。"
     )
 
     match = _persist_match(
         jd_id=jd_id,
         resume_id=resume_id,
-        score=score,
+        score=final_score,
         matched=matched,
         missing=missing,
         partial=partial,
@@ -179,12 +248,6 @@ def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
         "suggestion": match.suggestion,
         "created_at": match.created_at,
     }
-
-
-def _extract_skill_aliases(term: str) -> List[str]:
-    """返回某个技能词可能命中的别名，用于加分项判定"""
-    normalized = _normalize(term)
-    return [normalized] + [alias for aliases in SKILL_ALIASES.values() for alias in aliases if alias in normalized]
 
 
 def get_match_detail(match_id: str, db: Session) -> Optional[dict]:
