@@ -14,6 +14,6 @@ def get_vector_store():
     return client
 
 
-def get_or_create_collection(client, name: str = "jd_embeddings"):
+def get_or_create_collection(client, name: str = "jd_embeddings", metadata=None):
     """获取或创建集合"""
-    return client.get_or_create_collection(name=name)
+    return client.get_or_create_collection(name=name, metadata=metadata)

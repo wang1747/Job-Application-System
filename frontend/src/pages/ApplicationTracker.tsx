@@ -1,25 +1,15 @@
 import { type FC, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import KanbanBoard from "../components/KanbanBoard";
+import StatsDashboard from "../components/StatsDashboard";
 import { STATUS_LABELS, STATUS_ORDER } from "../constants/application";
 import type {
   Application,
-  ApplicationStats,
   ApplicationStatus,
   JDItem,
   Reminders,
   ResumeItem,
 } from "../types";
-
-const EMPTY_STATS: ApplicationStats = {
-  total: 0,
-  status_counts: {},
-  status_order: [],
-  conversion_rate: {
-    applied_to_interview: 0,
-    interview_to_offer: 0,
-  },
-};
 
 interface EditForm {
   status: string;
@@ -31,7 +21,6 @@ interface EditForm {
 
 const ApplicationTracker: FC = () => {
   const [items, setItems] = useState<Application[]>([]);
-  const [stats, setStats] = useState<ApplicationStats>(EMPTY_STATS);
   const [reminders, setReminders] = useState<Reminders | null>(null);
   const [jds, setJds] = useState<JDItem[]>([]);
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
@@ -56,15 +45,13 @@ const ApplicationTracker: FC = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [appsRes, statsRes, remindRes, jdRes, resumeRes] = await Promise.all([
+      const [appsRes, remindRes, jdRes, resumeRes] = await Promise.all([
         api.applications.list(),
-        api.applications.stats(),
         api.applications.reminders(),
         api.jd.list(),
         api.resume.list(),
       ]);
       if (appsRes.success && appsRes.data) setItems(appsRes.data);
-      if (statsRes.success && statsRes.data) setStats(statsRes.data);
       if (remindRes.success && remindRes.data) setReminders(remindRes.data);
       if (jdRes.success && jdRes.data) setJds(jdRes.data);
       if (resumeRes.success && resumeRes.data) setResumes(resumeRes.data);
@@ -180,11 +167,6 @@ const ApplicationTracker: FC = () => {
     }
   };
 
-  const offerCount =
-    (stats.status_counts.offered || 0) + (stats.status_counts.accepted || 0);
-  const reminderCount =
-    (reminders?.overdue_count || 0) + (reminders?.upcoming_count || 0);
-
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
       <h1 className="text-2xl font-bold mb-6">投递追踪</h1>
@@ -196,27 +178,7 @@ const ApplicationTracker: FC = () => {
         <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg border border-green-300">{message}</div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "投递总数", value: stats.total, color: "text-blue-700" },
-          { label: "Offer 数", value: offerCount, color: "text-green-700" },
-          {
-            label: "投递→面试",
-            value: `${stats.conversion_rate.applied_to_interview}%`,
-            color: "text-amber-700",
-          },
-          {
-            label: "待跟进提醒",
-            value: reminderCount,
-            color: reminderCount > 0 ? "text-red-700" : "text-gray-700",
-          },
-        ].map((item) => (
-          <div key={item.label} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-500">{item.label}</div>
-            <div className={`text-2xl font-bold mt-1 ${item.color}`}>{item.value}</div>
-          </div>
-        ))}
-      </div>
+      <StatsDashboard />
 
       {reminders && reminders.has_reminders && (
         <div className="grid lg:grid-cols-2 gap-4 mb-6">

@@ -1,3 +1,5 @@
+import hashlib
+import math
 import re
 from typing import Dict, List, Optional, Set
 
@@ -8,6 +10,9 @@ from app.models.jd import JobDescription
 from app.models.match import MatchResult
 from app.models.resume import Resume
 from app.core.vector_store import get_vector_store, get_or_create_collection
+
+_EMBEDDING_DIM = 384
+_SEMANTIC_COLLECTION = "jd_resume_matches"
 
 # ============ 本地技能词典匹配（保留作为降级方案） ============
 
@@ -131,45 +136,59 @@ def _persist_match(
 
 # ============ 语义匹配（ChromaDB 增强） ============
 
+def _tokenize_for_embedding(text: str) -> List[str]:
+    """将中英文文本拆成词元和汉字 n-gram，供本地向量化使用"""
+    text = (text or "").lower()
+    tokens = re.findall(r"[a-z0-9]+", text)
+    han = re.findall(r"[\u4e00-\u9fff]", text)
+    tokens.extend(han)
+    tokens.extend("".join(han[i:i + 2]) for i in range(len(han) - 1))
+    return tokens
+
+
 def _get_embedding(text: str) -> List[float]:
-    """获取文本的 embedding"""
-    from app.core.llm import get_llm
-    llm = get_llm()
-    try:
-        # DeepSeek API 兼容 OpenAI embedding 接口
-        response = llm.embeddings.create(
-            model="text-embedding-ada-002",
-            input=text[:8000]  # 限制长度
-        )
-        return response.data[0].embedding
-    except Exception as e:
-        print(f"⚠️ Embedding 获取失败: {e}")
-        return []
+    """本地确定性向量化：不依赖外网，适合 DeepSeek 无 embedding 接口的场景"""
+    vector = [0.0] * _EMBEDDING_DIM
+    for token in _tokenize_for_embedding(text)[:2000]:
+        digest = hashlib.md5(token.encode("utf-8")).digest()
+        index = int.from_bytes(digest[:4], "big") % _EMBEDDING_DIM
+        vector[index] += 1.0
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        return vector
+    return [value / norm for value in vector]
 
 
-def _semantic_score(jd_text: str, resume_text: str) -> int:
-    """使用 ChromaDB 计算语义相似度分数"""
+def _semantic_score(jd_id: str, jd_text: str, resume_text: str) -> int:
+    """将 JD 向量写入 ChromaDB，再用简历向量做余弦相似度查询"""
     try:
         client = get_vector_store()
-        collection = get_or_create_collection(client, "jd_resume_matches")
-        
-        resume_embedding = _get_embedding(resume_text[:8000])
-        if not resume_embedding:
-            return 0
-        
+        collection = get_or_create_collection(
+            client,
+            _SEMANTIC_COLLECTION,
+            metadata={"hnsw:space": "cosine"},
+        )
+        collection.upsert(
+            ids=[jd_id],
+            embeddings=[_get_embedding(jd_text)],
+            metadatas=[{"jd_id": jd_id}],
+        )
+
+        resume_embedding = _get_embedding(resume_text)
         results = collection.query(
             query_embeddings=[resume_embedding],
-            n_results=5,
+            n_results=1,
+            where={"jd_id": jd_id},
+            include=["distances"],
         )
-        
-        if results["ids"] and len(results["ids"][0]) > 0:
-            distances = results["distances"][0] if results.get("distances") else []
-            if distances and distances[0] < 1.0:
-                # 距离越小相似度越高，映射到 0-100 分
-                return max(0, min(100, int((1.0 - distances[0]) * 100)))
+
+        if results.get("ids") and results["ids"] and results["ids"][0]:
+            distance = results["distances"][0][0]
+            similarity = max(0.0, min(1.0, 1.0 - distance))
+            return int(round(similarity * 100))
         return 0
     except Exception as e:
-        print(f"⚠️ 语义匹配失败，使用本地匹配: {e}")
+        print(f"[WARN] 语义匹配失败，使用本地匹配: {e}")
         return 0
 
 
@@ -212,7 +231,7 @@ def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
     local_score = max(0, min(100, 100 - len(missing) * hard_weight - len(partial) * nice_weight))
     
     # 2. 语义匹配（ChromaDB）
-    semantic_score = _semantic_score(jd_text, resume_text)
+    semantic_score = _semantic_score(jd.id, jd_text, resume_text)
     
     # 3. 混合分数：语义匹配占 40%，本地匹配占 60%
     if semantic_score > 0:

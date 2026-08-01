@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,15 @@ class Settings(BaseSettings):
 
     # 默认用户
     default_user_id: str = "default"
+
+    @model_validator(mode="after")
+    def _resolve_project_paths(self):
+        if self.database_url.startswith("sqlite:///./"):
+            relative = self.database_url[len("sqlite:///./"):]
+            self.database_url = f"sqlite:///{(PROJECT_ROOT / relative).as_posix()}"
+        if not Path(self.chroma_persist_path).is_absolute():
+            self.chroma_persist_path = str(PROJECT_ROOT / self.chroma_persist_path)
+        return self
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

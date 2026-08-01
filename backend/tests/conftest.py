@@ -90,6 +90,10 @@ def db_session():
 @pytest.fixture
 def client(tmp_path):
     """FastAPI TestClient 实例：临时文件数据库 + 离线 LLM，线程安全"""
+    from app.config import get_settings
+    settings = get_settings()
+    settings.chroma_persist_path = str(tmp_path / "chroma")
+
     db_path = tmp_path / "test.db"
     engine = create_engine(
         f"sqlite:///{db_path.as_posix()}",
