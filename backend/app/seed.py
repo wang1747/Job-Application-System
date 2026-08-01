@@ -22,10 +22,10 @@ def seed_demo_data(db: Session):
     # 检查是否已有数据
     existing = db.query(JobDescription).filter(JobDescription.user_id == user_id).first()
     if existing:
-        print("⚠️  数据库已有数据，跳过种子填充")
+        print("[SKIP] 数据库已有数据，跳过种子填充")
         return
 
-    print("🌱 开始生成种子数据...")
+    print("[INFO] 开始生成种子数据...")
 
     # 1. JD 数据
     jds = [
@@ -171,7 +171,7 @@ def seed_demo_data(db: Session):
         db.add(event)
     db.commit()
 
-    print(f"✅ 种子数据生成完成！")
+    print("[OK] 种子数据生成完成")
     print(f"   - {len(jds)} 条 JD")
     print(f"   - {len(resumes)} 份简历")
     print(f"   - {len(articles)} 篇面经")
