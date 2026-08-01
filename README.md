@@ -5,19 +5,19 @@ OfferFlow 是一个面向求职全流程的 Web 应用，覆盖 JD 智能解析�
 ## 功能
 
 - **JD 解析**：粘贴职位描述，自动提取公司、职位、硬性要求、技术栈和隐藏信号，支持历史记录管理
-- **匹配分析**：选择 JD 与简历，计算技能匹配度并输出差距分析
+- **匹配分析**：选择 JD 与简历，使用 ChromaDB 向量语义（40%）+ 本地技能词典（60%）混合评分，并输出差距分析
 - **简历优化**：上传 PDF / Word / Markdown / TXT 简历，针对目标 JD 输出优化稿、改动项和 ATS 评分对比，支持多版本管理
 - **面试准备**：导入面经文本或文件，自动去重、提取题目；基于简历 + JD + 面经生成面试题；多轮模拟面试并生成总结
-- **投递追踪**：看板管理投递状态流转，支持统计、跟进提醒和面试前公司面经推送
+- **投递追踪**：看板管理投递状态流转，支持 Recharts 统计图表、跟进提醒和面试前公司面经推送
 
 ## 技术栈
 
 | 层 | 技术 |
 | --- | --- |
-| 后端 | Python 3.13 / FastAPI / SQLAlchemy |
+| 后端 | Python 3.13 / FastAPI / SQLAlchemy / Alembic |
 | Agent | LangChain / LangGraph / ChromaDB |
 | LLM | OpenAI 兼容 API（默认 DeepSeek） |
-| 前端 | React 19 / TypeScript / Vite / TailwindCSS |
+| 前端 | React 19 / TypeScript / Vite / TailwindCSS / Recharts |
 | 部署 | Docker / docker-compose |
 
 ## 快速开始
@@ -42,6 +42,15 @@ uv run python run.py
 ```
 
 后端默认运行在 `http://127.0.0.1:8001`，首次启动会自动建表并写入演示数据。
+
+### 2.1 数据库迁移（Alembic）
+
+```bash
+cd backend
+uv run alembic upgrade head
+```
+
+数据库统一使用项目根目录的 `offerflow.db`。Alembic 初始迁移会自动建表；对已有数据库执行时只会补版本标记，不会重复建表。
 
 ### 3. 启动前端
 
@@ -79,6 +88,13 @@ docker compose up --build
 
 后端启动时会自动填充演示数据。如需重置，删除根目录 `offerflow.db` 后重新启动后端即可。
 
+## 匹配评分说明
+
+- 本地技能词典：基于已知技能别名计算匹配度
+- 向量语义：使用本地确定性向量化生成 JD/简历向量，写入 ChromaDB 后按余弦相似度查询
+- 最终评分：`语义分 * 40% + 本地分 * 60%`
+- DeepSeek 当前不提供 embedding 接口，因此语义向量化不依赖外网，也不支持图片识别
+
 ## API 概览
 
 | 方法 | 路径 | 说明 |
@@ -101,6 +117,8 @@ docker compose up --build
 ```text
 OfferFlow/
 ├── backend/
+│   ├── alembic/            # Alembic 迁移脚本
+│   ├── alembic.ini
 │   ├── app/
 │   │   ├── agents/          # LangGraph 工作流与 Agent 节点
 │   │   ├── api/routes/      # 业务路由
@@ -112,7 +130,7 @@ OfferFlow/
 ├── frontend/
 │   └── src/
 │       ├── api/             # API 客户端
-│       ├── components/      # 通用组件
+│       ├── components/      # 通用组件（含 StatsDashboard 统计图表）
 │       ├── pages/           # 页面
 │       └── types/           # TypeScript 类型
 ├── docker-compose.yml
