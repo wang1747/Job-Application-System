@@ -7,17 +7,23 @@ import type {
   InterviewQuestion,
   JDItem,
   JDParseResult,
+  LoginResponse,
   MatchResult,
   OptimizeResult,
   Reminders,
   ResumeItem,
   SimulateAnswer,
   SimulateSession,
+  User,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
 
 const CONNECTION_ERROR_MESSAGE = "无法连接后端服务，请确认后端已启动";
+
+const getToken = (): string | null => {
+  return localStorage.getItem("access_token");
+};
 
 async function fetchResponse(input: string, init?: RequestInit): Promise<Response> {
   try {
@@ -43,23 +49,66 @@ async function parseResponse<T>(res: Response): Promise<ApiResponse<T>> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetchResponse(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...options,
   });
   return parseResponse<T>(res);
 }
 
 async function requestForm<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
+  const headers: HeadersInit = {};
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetchResponse(`${BASE_URL}${path}`, {
     method: "POST",
+    headers,
     body: formData,
   });
   return parseResponse<T>(res);
 }
 
+export async function loginRequest(
+  username: string,
+  password: string,
+): Promise<ApiResponse<LoginResponse>> {
+  return request("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function registerRequest(
+  name: string,
+  password: string,
+): Promise<ApiResponse<{ id: string; name: string; created_at: string }>> {
+  return request("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ name, password }),
+  });
+}
+
 export const api = {
   health: () => request<{ status: string; message: string }>("/api/health"),
+
+  auth: {
+    register: registerRequest,
+    login: loginRequest,
+    me: () => request<User>("/api/v1/auth/me"),
+    logout: () =>
+      request<{ message: string }>("/api/v1/auth/logout", {
+        method: "POST",
+      }),
+  },
 
   jd: {
     parse: (rawText: string) =>
@@ -109,7 +158,9 @@ export const api = {
 
   interview: {
     articles: () =>
-      request<{ items: InterviewArticle[]; total: number }>("/api/v1/interview/articles"),
+      request<{ items: InterviewArticle[]; total: number }>(
+        "/api/v1/interview/articles",
+      ),
     delete: (id: string) =>
       request<null>(`/api/v1/interview/articles/${id}`, { method: "DELETE" }),
     importArticle: (company: string, rawContent: string, position?: string) =>
@@ -128,17 +179,25 @@ export const api = {
       const formData = new FormData();
       formData.append("company", company);
       formData.append("file", file);
-      return requestForm<{ id: string; duplicate: boolean; filename: string; question_count: number }>(
-        "/api/v1/interview/articles/upload",
-        formData,
-      );
+      return requestForm<{
+        id: string;
+        duplicate: boolean;
+        filename: string;
+        question_count: number;
+      }>("/api/v1/interview/articles/upload", formData);
     },
     questions: () =>
-      request<{ items: InterviewQuestion[]; total: number }>("/api/v1/interview/questions"),
+      request<{ items: InterviewQuestion[]; total: number }>(
+        "/api/v1/interview/questions",
+      ),
     generate: (resumeId: string, jdId: string, articleId?: string) =>
       request<{ questions: GeneratedQuestion[] }>("/api/v1/interview/generate", {
         method: "POST",
-        body: JSON.stringify({ resume_id: resumeId, jd_id: jdId, article_id: articleId }),
+        body: JSON.stringify({
+          resume_id: resumeId,
+          jd_id: jdId,
+          article_id: articleId,
+        }),
       }),
     simulateStart: (resumeId: string, jdId: string) =>
       request<SimulateSession>("/api/v1/interview/simulate/start", {
@@ -146,10 +205,13 @@ export const api = {
         body: JSON.stringify({ resume_id: resumeId, jd_id: jdId }),
       }),
     simulateAnswer: (sessionId: string, answer: string) =>
-      request<SimulateAnswer>(`/api/v1/interview/simulate/${sessionId}/answer`, {
-        method: "POST",
-        body: JSON.stringify({ answer }),
-      }),
+      request<SimulateAnswer>(
+        `/api/v1/interview/simulate/${sessionId}/answer`,
+        {
+          method: "POST",
+          body: JSON.stringify({ answer }),
+        },
+      ),
     simulateSummary: (sessionId: string) =>
       request<{
         summary: string;
@@ -166,7 +228,12 @@ export const api = {
     create: (company: string, position: string, jdId?: string, resumeId?: string) =>
       request<{ id: string }>("/api/v1/applications", {
         method: "POST",
-        body: JSON.stringify({ company, position, jd_id: jdId, resume_id: resumeId }),
+        body: JSON.stringify({
+          company,
+          position,
+          jd_id: jdId,
+          resume_id: resumeId,
+        }),
       }),
     update: (
       id: string,
@@ -183,10 +250,13 @@ export const api = {
         body: JSON.stringify(payload),
       }),
     updateStatus: (id: string, status: string) =>
-      request<{ id: string; status: string }>(`/api/v1/applications/${id}/status`, {
-        method: "PUT",
-        body: JSON.stringify({ status }),
-      }),
+      request<{ id: string; status: string }>(
+        `/api/v1/applications/${id}/status`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ status }),
+        },
+      ),
     remove: (id: string) =>
       request<null>(`/api/v1/applications/${id}`, { method: "DELETE" }),
     stats: () => request<ApplicationStats>("/api/v1/applications/stats"),
@@ -212,6 +282,8 @@ export const api = {
         body: JSON.stringify(payload),
       }),
     interviewArticles: (id: string) =>
-      request<InterviewArticle[]>(`/api/v1/applications/${id}/interview-articles`),
+      request<InterviewArticle[]>(
+        `/api/v1/applications/${id}/interview-articles`,
+      ),
   },
 };

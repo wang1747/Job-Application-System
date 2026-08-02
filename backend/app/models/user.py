@@ -11,4 +11,5 @@ class User(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())

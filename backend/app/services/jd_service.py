@@ -2,20 +2,18 @@
 
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models.jd import JobDescription
 from app.agents.graphs.jd_analysis import analyze_jd
 
 
-async def parse_and_save(raw_text: str, db: Session) -> dict:
-    settings = get_settings()
+async def parse_and_save(raw_text: str, db: Session, user_id: str) -> dict:
     result = await analyze_jd(raw_text)
     if result.get("error"):
         return {"success": False, "data": None, "error": result["error"]}
 
     parsed = result.get("parsed", {})
     jd = JobDescription(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         raw_text=raw_text,
         company=parsed.get("company"),
         position=parsed.get("position"),
@@ -30,18 +28,16 @@ async def parse_and_save(raw_text: str, db: Session) -> dict:
     return {"success": True, "data": {"id": jd.id, "parsed": parsed}, "error": None}
 
 
-def list_jds(db: Session) -> list:
-    settings = get_settings()
+def list_jds(db: Session, user_id: str) -> list:
     return db.query(JobDescription).filter(
-        JobDescription.user_id == settings.default_user_id
+        JobDescription.user_id == user_id
     ).order_by(JobDescription.created_at.desc()).all()
 
 
-def delete_jd(jd_id: str, db: Session) -> bool:
-    settings = get_settings()
+def delete_jd(jd_id: str, db: Session, user_id: str) -> bool:
     jd = db.query(JobDescription).filter(
         JobDescription.id == jd_id,
-        JobDescription.user_id == settings.default_user_id
+        JobDescription.user_id == user_id
     ).first()
     if not jd:
         return False

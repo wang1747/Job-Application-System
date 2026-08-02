@@ -3,7 +3,6 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models.resume import Resume
 from app.services.match_service import _extract_skills
 
@@ -22,44 +21,41 @@ def _summarize_resume(raw_text: str) -> dict:
     }
 
 
-def list_resumes(db: Session) -> list:
+def list_resumes(db: Session, user_id: str) -> list:
     """获取当前用户的简历列表"""
-    settings = get_settings()
     return db.query(Resume).filter(
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).order_by(Resume.created_at.desc()).all()
 
 
-def get_resume_versions(resume_id: str, db: Session):
+def get_resume_versions(resume_id: str, db: Session, user_id: str):
     """获取简历版本历史：单用户 MVP 中所有版本属于同一份简历文档"""
-    settings = get_settings()
     doc = db.query(Resume).filter(
         Resume.id == resume_id,
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).first()
     if not doc:
         return None
     return db.query(Resume).filter(
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).order_by(Resume.version.desc()).all()
 
 
 def upload_resume(
     raw_text: str,
     source_file: Optional[str],
-    db: Session
+    db: Session,
+    user_id: str
 ) -> Resume:
     """上传并保存简历"""
-    settings = get_settings()
-
     latest = db.query(Resume).filter(
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).order_by(Resume.version.desc()).first()
 
     next_version = (latest.version + 1) if latest else 1
 
     resume = Resume(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         version=next_version,
         raw_text=raw_text,
         parsed_json=_summarize_resume(raw_text),
@@ -75,24 +71,24 @@ def save_optimized_version(
     resume_id: str,
     optimized_text: str,
     changes: list,
-    db: Session
+    db: Session,
+    user_id: str
 ) -> Resume:
     """把优化结果保存为简历新版本"""
-    settings = get_settings()
     source = db.query(Resume).filter(
         Resume.id == resume_id,
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).first()
     if not source:
         raise ValueError("简历不存在")
 
     latest = db.query(Resume).filter(
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).order_by(Resume.version.desc()).first()
     next_version = (latest.version + 1) if latest else 1
 
     resume = Resume(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         version=next_version,
         raw_text=optimized_text,
         parsed_json={

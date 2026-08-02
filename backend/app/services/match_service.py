@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models.jd import JobDescription
 from app.models.match import MatchResult
 from app.models.resume import Resume
@@ -194,19 +193,18 @@ def _semantic_score(jd_id: str, jd_text: str, resume_text: str) -> int:
 
 # ============ 主匹配函数（混合方案） ============
 
-def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
+def calculate_match(jd_id: str, resume_id: str, db: Session, user_id: str) -> dict:
     """
     计算 JD 与简历的匹配度
     优先使用 ChromaDB 语义匹配，降级使用本地技能词典
     """
-    settings = get_settings()
     jd = db.query(JobDescription).filter(
         JobDescription.id == jd_id,
-        JobDescription.user_id == settings.default_user_id,
+        JobDescription.user_id == user_id,
     ).first()
     resume = db.query(Resume).filter(
         Resume.id == resume_id,
-        Resume.user_id == settings.default_user_id,
+        Resume.user_id == user_id,
     ).first()
     if not jd:
         raise ValueError("JD 不存在")
@@ -269,14 +267,13 @@ def calculate_match(jd_id: str, resume_id: str, db: Session) -> dict:
     }
 
 
-def get_match_detail(match_id: str, db: Session) -> Optional[dict]:
+def get_match_detail(match_id: str, db: Session, user_id: str) -> Optional[dict]:
     """获取单条匹配结果详情"""
-    settings = get_settings()
     match = db.query(MatchResult).join(
         JobDescription, MatchResult.jd_id == JobDescription.id
     ).filter(
         MatchResult.id == match_id,
-        JobDescription.user_id == settings.default_user_id,
+        JobDescription.user_id == user_id,
     ).first()
     if not match:
         return None
@@ -292,14 +289,14 @@ def get_match_detail(match_id: str, db: Session) -> Optional[dict]:
     }
 
 
-def get_rankings(db: Session) -> List[dict]:
+def get_rankings(db: Session, user_id: str, page: int = 1, page_size: int = 20) -> List[dict]:
     """获取当前用户按匹配度排序的 JD 列表"""
-    settings = get_settings()
-    rows = db.query(MatchResult).join(
+    query = db.query(MatchResult).join(
         JobDescription, MatchResult.jd_id == JobDescription.id
     ).filter(
-        JobDescription.user_id == settings.default_user_id
-    ).order_by(MatchResult.score.desc()).all()
+        JobDescription.user_id == user_id
+    ).order_by(MatchResult.score.desc())
+    rows = query.offset((page - 1) * page_size).limit(page_size).all()
     return [
         {
             "id": row.id,

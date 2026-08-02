@@ -1,10 +1,18 @@
+"""
+投递追踪路由：CRUD、状态更新、统计
+"""
+
+# ===== 标准库 =====
+import logging
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Optional, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+# ===== 第三方库 =====
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
+# ===== 项目内部 =====
 from app.core.database import get_db
 from app.services.application_service import (
     add_event,
@@ -17,8 +25,12 @@ from app.services.application_service import (
     update_application_status,
 )
 from app.services.reminder_service import get_company_interview_articles, get_reminders
+from app.api.routes.auth import get_current_user_required
+from app.models.user import User
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1/applications", tags=["投递追踪模块"])
 
 
 class CreateApplicationRequest(BaseModel):
@@ -63,74 +75,78 @@ class ApplicationOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
-@router.post("/")
+@router.post("")
+@router.post("/", summary="创建投递记录")
 async def create_application_endpoint(
     req: CreateApplicationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """创建投递记录"""
     try:
         app = create_application(
             company=req.company,
             position=req.position,
             jd_id=req.jd_id,
             resume_id=req.resume_id,
-            db=db
+            db=db,
+            user_id=current_user.id
         )
+        logger.info(f"用户 {current_user.id} 创建投递记录: {app.id}")
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return {"success": True, "data": {"id": app.id}, "error": None}
 
 
-@router.get("/")
+@router.get("")
+@router.get("/", summary="获取投递列表")
 async def list_applications_endpoint(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
     status: Optional[str] = Query(None, description="按状态筛选")
 ):
-    """获取投递列表"""
-    apps = list_applications(db, status)
+    apps = list_applications(db, user_id=current_user.id, status=status)
     return {"success": True, "data": [ApplicationOut.model_validate(item) for item in apps], "error": None}
 
 
-@router.get("/stats")
+@router.get("/stats", summary="获取投递统计数据")
 async def get_statistics_endpoint(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """获取投递统计数据"""
-    stats = get_statistics(db)
+    stats = get_statistics(db, user_id=current_user.id)
     return {"success": True, "data": stats, "error": None}
 
 
-@router.get("/reminders")
+@router.get("/reminders", summary="获取提醒汇总")
 async def get_reminders_endpoint(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """获取提醒汇总（超期跟进 + 即将到来的面试）"""
-    reminders = get_reminders(db)
+    reminders = get_reminders(db, user_id=current_user.id)
     return {"success": True, "data": reminders, "error": None}
 
 
-@router.post("/{app_id}/events")
+@router.post("/{app_id}/events", summary="添加投递事件")
 async def add_event_endpoint(
     app_id: str,
     req: EventCreateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """添加投递事件"""
     event = add_event(
         application_id=app_id,
         event_type=req.event_type,
         from_status=req.from_status,
         to_status=req.to_status,
         description=req.description,
-        db=db
+        db=db,
+        user_id=current_user.id
     )
     if not event:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
     return {
         "success": True,
         "data": {
@@ -145,43 +161,43 @@ async def add_event_endpoint(
     }
 
 
-@router.get("/{app_id}/interview-articles")
+@router.get("/{app_id}/interview-articles", summary="获取公司面经（面试前推送）")
 async def get_interview_articles_for_application(
     app_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """获取某投递对应的公司面经（面试前推送）"""
-    app = get_application(app_id, db)
+    app = get_application(app_id, db, user_id=current_user.id)
     if not app:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
-
-    articles = get_company_interview_articles(app.company, db)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
+    articles = get_company_interview_articles(app.company, db, user_id=current_user.id)
     return {"success": True, "data": articles, "error": None}
 
 
-@router.get("/{app_id}")
+@router.get("/{app_id}", summary="获取单个投递记录")
 async def get_application_endpoint(
     app_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """获取单个投递记录"""
-    app = get_application(app_id, db)
+    app = get_application(app_id, db, user_id=current_user.id)
     if not app:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
     return {"success": True, "data": ApplicationOut.model_validate(app), "error": None}
 
 
-@router.put("/{app_id}")
+@router.put("/{app_id}", summary="更新投递记录")
 async def update_application_endpoint(
     app_id: str,
     req: UpdateApplicationRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """更新投递记录（状态/日期/下一步行动/备注）"""
     try:
         app = update_application(
             app_id=app_id,
             db=db,
+            user_id=current_user.id,
             status=req.status,
             applied_date=req.applied_date,
             next_action=req.next_action,
@@ -189,34 +205,35 @@ async def update_application_endpoint(
             notes=req.notes,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if not app:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
     return {"success": True, "data": ApplicationOut.model_validate(app), "error": None}
 
 
-@router.delete("/{app_id}")
+@router.delete("/{app_id}", summary="删除投递记录")
 async def delete_application_endpoint(
     app_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """删除投递记录"""
-    if not delete_application(app_id, db):
-        raise HTTPException(status_code=404, detail="投递记录不存在")
+    if not delete_application(app_id, db, user_id=current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
     return {"success": True, "data": None, "error": None}
 
 
-@router.put("/{app_id}/status")
+@router.put("/{app_id}/status", summary="更新投递状态")
 async def update_status_endpoint(
     app_id: str,
     req: UpdateStatusRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """更新投递状态"""
     try:
-        app = update_application_status(app_id, req.status, db)
+        app = update_application_status(app_id, req.status, db, user_id=current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if not app:
-        raise HTTPException(status_code=404, detail="投递记录不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="投递记录不存在")
+    logger.info(f"用户 {current_user.id} 更新投递状态: {app_id} → {req.status}")
     return {"success": True, "data": {"id": app.id, "status": app.status}, "error": None}

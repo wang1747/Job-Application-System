@@ -1,40 +1,50 @@
+"""
+面试路由：面经导入、列表、删除、面试题生成、模拟面试
+"""
+
+# ===== 标准库 =====
 import logging
 from typing import Optional, Literal
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+# ===== 第三方库 =====
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from app.services.interview_service import (
-    create_interview_session,
-    delete_article,
-    extract_article_metadata,
-    extract_questions_from_article,
-    get_interview_session,
-    get_interview_summary,
-    get_questions,
-    import_article,
-    list_articles,
-    save_generated_questions,
-    submit_interview_answer,
-)
-from app.agents.tools.document_parser import parse_article_file
 
+# ===== 项目内部 =====
 from app.core.database import get_db
-from app.config import get_settings
 from app.models.resume import Resume
 from app.models.jd import JobDescription
 from app.models.interview import InterviewArticle
+from app.services.interview_service import (
+    import_article,
+    list_articles,
+    delete_article,
+    get_questions,
+    save_generated_questions,
+    extract_article_metadata,
+    extract_questions_from_article,
+    create_interview_session,
+    submit_interview_answer,
+    get_interview_summary,
+    get_interview_session,
+)
 from app.agents.graphs.interview_prep import generate_interview_questions
+from app.agents.tools.document_parser import parse_article_file
+from app.api.routes.auth import get_current_user_required
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/interview", tags=["面试备考模块"])
 
+
+# ============ 请求/响应模型 ============
 
 class ImportArticleRequest(BaseModel):
-    company: str = Field(..., min_length=1, description="公司名称")
-    position: Optional[str] = Field(None, description="职位")
+    company: str = Field(..., min_length=1, description="公司名称", examples=["字节跳动"])
+    position: Optional[str] = Field(None, description="职位", examples=["后端开发"])
     raw_content: str = Field(..., min_length=1, description="面经内容")
     source: str = Field("manual", description="来源")
 
@@ -44,6 +54,15 @@ class GenerateQuestionsRequest(BaseModel):
     jd_id: str = Field(..., description="JD ID")
     article_id: Optional[str] = Field(None, description="面经ID（可选）")
     limit: int = Field(10, ge=1, le=30, description="生成数量上限")
+
+
+class StartSimulateRequest(BaseModel):
+    resume_id: str = Field(..., description="简历ID")
+    jd_id: str = Field(..., description="JD ID")
+
+
+class SubmitAnswerRequest(BaseModel):
+    answer: str = Field(..., min_length=1, description="回答内容")
 
 
 class ArticleOut(BaseModel):
@@ -57,8 +76,7 @@ class ArticleOut(BaseModel):
     difficulty: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class QuestionOut(BaseModel):
@@ -70,9 +88,10 @@ class QuestionOut(BaseModel):
     difficulty: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
+
+# ============ 通用资源查询函数 ============
 
 def _get_resource_or_404(model, resource_id: str, user_id: str, db: Session, resource_name: str):
     """通用资源查询函数"""
@@ -81,22 +100,29 @@ def _get_resource_or_404(model, resource_id: str, user_id: str, db: Session, res
         model.user_id == user_id
     ).first()
     if not resource:
-        raise HTTPException(status_code=404, detail=f"{resource_name}不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{resource_name}不存在")
     return resource
 
 
-@router.post("/articles", summary="导入面经文章", tags=["面试面经模块"])
+# ============ 接口 ============
+
+@router.post(
+    "/articles",
+    summary="导入面经文章",
+    description="导入面经文章，自动去重（相似度 >= 0.9 视为重复），并自动提取题目和标签"
+)
 async def import_article_endpoint(
     req: ImportArticleRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """导入面经文章"""
     article, duplicate = import_article(
         company=req.company,
         position=req.position,
         raw_content=req.raw_content,
         source=req.source,
-        db=db
+        db=db,
+        user_id=current_user.id
     )
     metadata = extract_article_metadata(req.raw_content)
     article.questions = metadata["questions"]
@@ -104,7 +130,8 @@ async def import_article_endpoint(
     article.difficulty = metadata["difficulty"]
     db.commit()
     db.refresh(article)
-    saved = extract_questions_from_article(article.id, db) if metadata["questions"] else []
+    saved = extract_questions_from_article(article.id, db, current_user.id) if metadata["questions"] else []
+    logger.info(f"用户 {current_user.id} 导入面经: {article.id}, duplicate={duplicate}")
     return {
         "success": True,
         "data": {
@@ -119,25 +146,30 @@ async def import_article_endpoint(
     }
 
 
-@router.post("/articles/upload", summary="导入面经文件", tags=["面试面经模块"])
+@router.post(
+    "/articles/upload",
+    summary="导入面经文件",
+    description="上传面经文件（PDF/Markdown/HTML/TXT），自动解析并提取内容"
+)
 async def upload_article_file(
     file: UploadFile = File(...),
     company: str = File(...),
     position: Optional[str] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """上传面经文件（PDF/Markdown/HTML/TXT）"""
     content = await file.read()
     try:
         raw_content = parse_article_file(file.filename, content)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     article, duplicate = import_article(
         company=company,
         position=position,
         raw_content=raw_content,
         source="file",
-        db=db
+        db=db,
+        user_id=current_user.id
     )
     metadata = extract_article_metadata(raw_content)
     article.questions = metadata["questions"]
@@ -145,7 +177,8 @@ async def upload_article_file(
     article.difficulty = metadata["difficulty"]
     db.commit()
     db.refresh(article)
-    saved = extract_questions_from_article(article.id, db) if metadata["questions"] else []
+    saved = extract_questions_from_article(article.id, db, current_user.id) if metadata["questions"] else []
+    logger.info(f"用户 {current_user.id} 上传面经文件: {file.filename}, article={article.id}")
     return {
         "success": True,
         "data": {
@@ -158,9 +191,14 @@ async def upload_article_file(
     }
 
 
-@router.get("/articles", summary="获取面经列表", tags=["面试面经模块"])
+@router.get(
+    "/articles",
+    summary="获取面经列表",
+    description="获取面经列表，支持分页、按公司/职位筛选"
+)
 async def list_articles_endpoint(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     company: Optional[str] = Query(None, description="公司名称筛选"),
@@ -168,9 +206,9 @@ async def list_articles_endpoint(
     sort_by: Literal["created_at", "company", "position"] = Query("created_at", description="排序字段"),
     sort_order: Literal["asc", "desc"] = Query("desc", description="排序方向")
 ):
-    """获取面经列表（分页+筛选）"""
     items, total = list_articles(
         db=db,
+        user_id=current_user.id,
         page=page,
         page_size=page_size,
         company=company,
@@ -190,27 +228,37 @@ async def list_articles_endpoint(
     }
 
 
-@router.delete("/articles/{article_id}", summary="删除面经", tags=["面试面经模块"])
+@router.delete(
+    "/articles/{article_id}",
+    summary="删除面经",
+    description="删除面经及其关联的所有面试题"
+)
 async def delete_article_endpoint(
     article_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """删除面经"""
-    if not delete_article(article_id, db):
-        raise HTTPException(status_code=404, detail="面经不存在")
+    if not delete_article(article_id, db, user_id=current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="面经不存在")
+    logger.info(f"用户 {current_user.id} 删除面经: {article_id}")
     return {"success": True, "data": None, "error": None}
 
 
-@router.get("/questions", summary="获取面试题列表", tags=["面试面经模块"])
+@router.get(
+    "/questions",
+    summary="获取面试题列表",
+    description="获取面试题列表，支持按面经筛选和分页"
+)
 async def get_questions_endpoint(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
     article_id: Optional[str] = Query(None, description="面经ID筛选"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量")
 ):
-    """获取面试题列表（支持按面经筛选）"""
     items, total = get_questions(
         db=db,
+        user_id=current_user.id,
         article_id=article_id,
         page=page,
         page_size=page_size
@@ -227,35 +275,35 @@ async def get_questions_endpoint(
     }
 
 
-@router.post("/generate", summary="生成面试题", tags=["面试面经模块"])
+@router.post(
+    "/generate",
+    summary="生成面试题",
+    description="基于简历 + JD + 面经生成面试题"
+)
 async def generate_questions_endpoint(
     req: GenerateQuestionsRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """基于简历 + JD + 面经生成面试题"""
-    settings = get_settings()
-    user_id = settings.default_user_id
-
     # 获取简历
-    resume = _get_resource_or_404(Resume, req.resume_id, user_id, db, "简历")
+    resume = _get_resource_or_404(Resume, req.resume_id, current_user.id, db, "简历")
     if not resume.raw_text or not resume.raw_text.strip():
-        raise HTTPException(status_code=400, detail="简历内容为空，请先上传简历文本")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="简历内容为空")
 
     # 获取 JD
-    jd = _get_resource_or_404(JobDescription, req.jd_id, user_id, db, "JD")
+    jd = _get_resource_or_404(JobDescription, req.jd_id, current_user.id, db, "JD")
     if not jd.raw_text or not jd.raw_text.strip():
-        raise HTTPException(status_code=400, detail="JD内容为空，请先上传JD文本")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JD内容为空")
 
     # 获取面经（可选）
     article_content = ""
     if req.article_id:
-        article = _get_resource_or_404(InterviewArticle, req.article_id, user_id, db, "面经")
+        article = _get_resource_or_404(InterviewArticle, req.article_id, current_user.id, db, "面经")
         article_content = article.raw_content or ""
-        logger.info(f"使用面经: {req.article_id}")
+        logger.info(f"用户 {current_user.id} 使用面经: {req.article_id}")
 
-    logger.info(f"开始生成面试题: resume={req.resume_id}, jd={req.jd_id}, limit={req.limit}")
+    logger.info(f"用户 {current_user.id} 开始生成面试题: resume={req.resume_id}, jd={req.jd_id}")
 
-    # 执行生成
     result = await generate_interview_questions(
         resume_text=resume.raw_text,
         jd_text=jd.raw_text,
@@ -265,45 +313,43 @@ async def generate_questions_endpoint(
 
     if result.get("error"):
         logger.error(f"面试题生成失败: {result.get('error')}")
-        raise HTTPException(status_code=500, detail=result["error"])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"])
 
     questions = result.get("questions", [])
     if questions:
         save_generated_questions(
-            user_id=user_id,
+            user_id=current_user.id,
             article_id=req.article_id,
             questions=questions,
             db=db
         )
 
-    logger.info(f"成功生成 {len(questions)} 道面试题")
+    logger.info(f"用户 {current_user.id} 成功生成 {len(questions)} 道面试题")
     return {
         "success": True,
         "data": {"questions": questions},
         "error": None
     }
 
-class StartSimulateRequest(BaseModel):
-    resume_id: str = Field(..., description="简历ID")
-    jd_id: str = Field(..., description="JD ID")
 
-
-class SubmitAnswerRequest(BaseModel):
-    answer: str = Field(..., min_length=1, description="回答内容")
-
-
-@router.post("/simulate/start", summary="开始模拟面试", tags=["面试面经模块"])
-def start_simulate(
+@router.post(
+    "/simulate/start",
+    summary="开始模拟面试",
+    description="创建模拟面试会话，返回第一个问题"
+)
+async def start_simulate(
     req: StartSimulateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """开始模拟面试，返回第一个问题"""
     try:
         session = create_interview_session(
             resume_id=req.resume_id,
             jd_id=req.jd_id,
-            db=db
+            db=db,
+            user_id=current_user.id
         )
+        logger.info(f"用户 {current_user.id} 开始模拟面试: session={session.id}")
         return {
             "success": True,
             "data": {
@@ -314,35 +360,40 @@ def start_simulate(
             "error": None
         }
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/simulate/{session_id}/answer", summary="提交回答", tags=["面试面经模块"])
-def submit_answer_endpoint(
+@router.post(
+    "/simulate/{session_id}/answer",
+    summary="提交回答",
+    description="提交当前问题回答，返回反馈和下一题"
+)
+async def submit_answer_endpoint(
     session_id: str,
     req: SubmitAnswerRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """提交回答，返回反馈和下一题"""
-    session = get_interview_session(session_id, db)
+    session = get_interview_session(session_id, db, current_user.id)
     if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     if session.status == "finished":
-        raise HTTPException(status_code=409, detail="面试已结束")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="面试已结束")
 
     try:
         feedback, next_question, is_finished = submit_interview_answer(
             session_id=session_id,
             answer=req.answer,
-            db=db
+            db=db,
+            user_id=current_user.id
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     if feedback is None:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
 
-    session = get_interview_session(session_id, db)
+    session = get_interview_session(session_id, db, current_user.id)
     question_count = len(session.questions or []) if session else 0
 
     return {
@@ -357,13 +408,17 @@ def submit_answer_endpoint(
     }
 
 
-@router.get("/simulate/{session_id}/summary", summary="获取面试总结", tags=["面试面经模块"])
-def get_summary_endpoint(
+@router.get(
+    "/simulate/{session_id}/summary",
+    summary="获取面试总结",
+    description="获取模拟面试完整总结，包含所有问答和反馈"
+)
+async def get_summary_endpoint(
     session_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """获取面试总结"""
-    summary = get_interview_summary(session_id, db)
+    summary = get_interview_summary(session_id, db, user_id=current_user.id)
     if not summary:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     return {"success": True, "data": summary, "error": None}

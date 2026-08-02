@@ -1,8 +1,7 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from sqlalchemy.orm import Session, selectinload
 
-from app.config import get_settings
 from app.models.application import Application, ApplicationEvent
 from app.models.jd import JobDescription
 from app.models.resume import Resume
@@ -21,25 +20,31 @@ APPLICATION_STATUSES = [
 ]
 
 
-def create_application(company: str, position: str, jd_id: Optional[str], resume_id: Optional[str], db: Session) -> Application:
+def create_application(
+    company: str,
+    position: str,
+    db: Session,
+    user_id: str,
+    jd_id: Optional[str] = None,
+    resume_id: Optional[str] = None,
+) -> Application:
     """创建投递记录"""
-    settings = get_settings()
     if jd_id:
         jd = db.query(JobDescription).filter(
             JobDescription.id == jd_id,
-            JobDescription.user_id == settings.default_user_id
+            JobDescription.user_id == user_id
         ).first()
         if not jd:
             raise ValueError("JD不存在")
     if resume_id:
         resume = db.query(Resume).filter(
             Resume.id == resume_id,
-            Resume.user_id == settings.default_user_id
+            Resume.user_id == user_id
         ).first()
         if not resume:
             raise ValueError("简历不存在")
     app = Application(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         company=company,
         position=position,
         jd_id=jd_id,
@@ -52,29 +57,32 @@ def create_application(company: str, position: str, jd_id: Optional[str], resume
     return app
 
 
-def list_applications(db: Session, status: Optional[str] = None) -> list:
+def list_applications(db: Session, user_id: str, status: Optional[str] = None) -> list:
     """获取投递列表（支持按状态筛选）"""
-    settings = get_settings()
     query = db.query(Application).filter(
-        Application.user_id == settings.default_user_id
+        Application.user_id == user_id
     )
     if status:
         query = query.filter(Application.status == status)
     return query.order_by(Application.updated_at.desc()).all()
 
 
-def get_application(app_id: str, db: Session) -> Optional[Application]:
+def get_application(app_id: str, db: Session, user_id: str) -> Optional[Application]:
     """获取单个投递记录"""
-    settings = get_settings()
     return db.query(Application).filter(
         Application.id == app_id,
-        Application.user_id == settings.default_user_id
+        Application.user_id == user_id
     ).first()
 
 
-def update_application_status(app_id: str, new_status: str, db: Session) -> Optional[Application]:
+def update_application_status(
+    app_id: str,
+    new_status: str,
+    db: Session,
+    user_id: str
+) -> Optional[Application]:
     """更新投递状态"""
-    app = get_application(app_id, db)
+    app = get_application(app_id, db, user_id)
     if not app:
         return None
     if new_status not in APPLICATION_STATUSES:
@@ -98,6 +106,7 @@ def update_application_status(app_id: str, new_status: str, db: Session) -> Opti
 def update_application(
     app_id: str,
     db: Session,
+    user_id: str,
     status: Optional[str] = None,
     applied_date: Optional[date] = None,
     next_action: Optional[str] = None,
@@ -105,7 +114,7 @@ def update_application(
     notes: Optional[str] = None,
 ) -> Optional[Application]:
     """更新投递记录的可编辑字段，状态变更时写入事件"""
-    app = get_application(app_id, db)
+    app = get_application(app_id, db, user_id)
     if not app:
         return None
     if status is not None:
@@ -135,9 +144,9 @@ def update_application(
     return app
 
 
-def delete_application(app_id: str, db: Session) -> bool:
+def delete_application(app_id: str, db: Session, user_id: str) -> bool:
     """删除投递记录"""
-    app = get_application(app_id, db)
+    app = get_application(app_id, db, user_id)
     if not app:
         return False
     db.delete(app)
@@ -145,12 +154,19 @@ def delete_application(app_id: str, db: Session) -> bool:
     return True
 
 
-def add_event(application_id: str, event_type: str, from_status: Optional[str], to_status: Optional[str], description: Optional[str], db: Session) -> Optional[ApplicationEvent]:
+def add_event(
+    application_id: str,
+    event_type: str,
+    db: Session,
+    user_id: str,
+    from_status: Optional[str] = None,
+    to_status: Optional[str] = None,
+    description: Optional[str] = None,
+) -> Optional[ApplicationEvent]:
     """添加投递事件"""
-    settings = get_settings()
     app = db.query(Application).filter(
         Application.id == application_id,
-        Application.user_id == settings.default_user_id
+        Application.user_id == user_id
     ).first()
     if not app:
         return None
@@ -170,13 +186,12 @@ def add_event(application_id: str, event_type: str, from_status: Optional[str], 
     return event
 
 
-def get_statistics(db: Session) -> dict:
+def get_statistics(db: Session, user_id: str) -> dict:
     """获取投递统计数据"""
-    settings = get_settings()
     apps = db.query(Application).options(
         selectinload(Application.events)
     ).filter(
-        Application.user_id == settings.default_user_id
+        Application.user_id == user_id
     ).all()
     
     total = len(apps)

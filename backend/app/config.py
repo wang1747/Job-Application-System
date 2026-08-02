@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+import warnings
 
-from pydantic import model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -9,22 +10,86 @@ DB_PATH = PROJECT_ROOT / "offerflow.db"
 
 
 class Settings(BaseSettings):
-    # LLM 配置
-    deepseek_api_key: str  # 必填，需在 .env 配置 DEEPSEEK_API_KEY
+    # ===== 应用环境 =====
+    app_env: str = Field(
+        default="development",
+        description="运行环境: development | staging | production",
+        pattern=r"^(development|staging|production)$"
+    )
+
+    # ===== LLM 配置 =====
+    deepseek_api_key: SecretStr = Field(..., description="DeepSeek API Key")
     deepseek_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
 
-    # 数据库
+    # ===== 数据库 =====
     database_url: str = f"sqlite:///{DB_PATH.as_posix()}"
 
-    # 向量库 ChromaDB 持久化路径
+    # ===== 向量库 =====
     chroma_persist_path: str = "./chroma_db"
 
-    # 默认用户
+    # ===== 默认用户 =====
     default_user_id: str = "default"
 
-    # CORS 配置
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1"
+    # ===== CORS 配置 =====
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1",
+        description="允许的跨域来源，逗号分隔"
+    )
+
+    # ===== JWT 配置 =====
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr("offerflow-secret-key-change-in-production"),
+        description="JWT 签名密钥，生产环境必须替换为至少32位的随机字符串"
+    )
+    jwt_algorithm: str = Field(default="HS256", description="JWT 签名算法，仅支持 HS256")
+    jwt_access_token_expire_minutes: int = Field(
+        default=60 * 24 * 7,
+        description="访问令牌有效期（分钟），默认 7 天"
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        validate_default=True,
+    )
+
+    # ===== 字段校验器 =====
+
+    @field_validator("jwt_secret_key")
+    def check_secret_length(cls, v: SecretStr):
+        """校验 JWT 密钥长度（HS256 建议至少 32 字符）"""
+        secret = v.get_secret_value()
+        if len(secret) < 32:
+            raise ValueError("JWT_SECRET_KEY 长度不能小于32位，请使用随机生成的长字符串")
+        return v
+
+    @field_validator("jwt_algorithm")
+    def valid_algorithm(cls, v: str):
+        """限制仅允许 HS256"""
+        if v not in ("HS256",):
+            raise ValueError("仅支持 HS256 签名算法")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_jwt_secret_env(self):
+        """校验 JWT 密钥：开发环境警告，生产环境直接报错"""
+        default_secret = "offerflow-secret-key-change-in-production"
+        current_secret = self.jwt_secret_key.get_secret_value()
+
+        if current_secret == default_secret:
+            if self.app_env == "development":
+                warnings.warn(
+                    "⚠️ 开发环境使用默认 JWT 密钥，上线前务必替换为随机生成的 32+ 位密钥！",
+                    RuntimeWarning
+                )
+            else:
+                raise ValueError(
+                    f"生产环境禁止使用默认 JWT_SECRET_KEY（当前环境: {self.app_env}），"
+                    "请通过环境变量设置随机生成的 32+ 位密钥"
+                )
+        return self
 
     @model_validator(mode="after")
     def _resolve_project_paths(self):
@@ -34,11 +99,6 @@ class Settings(BaseSettings):
         if not Path(self.chroma_persist_path).is_absolute():
             self.chroma_persist_path = str(PROJECT_ROOT / self.chroma_persist_path)
         return self
-
-    model_config = SettingsConfigDict(
-        env_file=PROJECT_ROOT / ".env",
-        env_file_encoding="utf-8",
-    )
 
 
 @lru_cache

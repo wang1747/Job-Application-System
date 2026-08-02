@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from .config import get_settings
 from .core.database import init_db, SessionLocal
 from .models.user import User
-from .api.routes import jd, resume, match, interview, application
+from .api.routes import application, auth, interview, jd, match, resume
 
 
 @asynccontextmanager
@@ -51,9 +51,10 @@ app.add_middleware(
 
 app.include_router(jd.router, prefix="/api/v1/jd", tags=["JD解析模块"])
 app.include_router(resume.router, prefix="/api/v1/resume", tags=["简历模块"])
-app.include_router(match.router, prefix="/api/v1/match", tags=["匹配分析模块"])
-app.include_router(interview.router, prefix="/api/v1/interview", tags=["面试备考模块"])
-app.include_router(application.router, prefix="/api/v1/applications", tags=["投递追踪模块"])
+app.include_router(match.router)
+app.include_router(interview.router)
+app.include_router(application.router)
+app.include_router(auth.router)
 
 
 @app.get("/api/health")

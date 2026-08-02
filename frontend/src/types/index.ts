@@ -1,3 +1,24 @@
+// ===== 通用 =====
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T | null;
+  error: string | null;
+}
+
+// ===== 认证 =====
+export interface User {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+// ===== JD =====
 export interface JDParseResult {
   company?: string;
   position?: string;
@@ -24,6 +45,7 @@ export interface JDItem {
   created_at?: string;
 }
 
+// ===== 简历 =====
 export interface ResumeItem {
   id: string;
   version: number;
@@ -53,6 +75,7 @@ export interface OptimizeResult {
   new_version: { id: string; version: number } | null;
 }
 
+// ===== 匹配 =====
 export interface MatchResult {
   id?: string;
   jd_id: string;
@@ -73,12 +96,7 @@ export interface MatchResult {
   suggestion?: string;
 }
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T | null;
-  error: string | null;
-}
-
+// ===== 投递 =====
 export interface Application {
   id: string;
   company: string;
@@ -135,6 +153,7 @@ export interface Reminders {
   has_reminders: boolean;
 }
 
+// ===== 面试 =====
 export interface InterviewArticle {
   id: string;
   company: string;

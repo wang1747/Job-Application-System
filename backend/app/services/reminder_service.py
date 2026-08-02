@@ -3,20 +3,18 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.models.application import Application
 from app.models.interview import InterviewArticle
 
 logger = logging.getLogger(__name__)
 
 
-def get_overdue_applications(db: Session, days: int = 3) -> List[Dict]:
+def get_overdue_applications(db: Session, user_id: str, days: int = 3) -> List[Dict]:
     """获取超期未跟进的投递记录"""
-    settings = get_settings()
     cutoff = datetime.now() - timedelta(days=days)
     
     apps = db.query(Application).filter(
-        Application.user_id == settings.default_user_id,
+        Application.user_id == user_id,
         Application.status.in_(["applied", "online_test", "first_interview", "second_interview", "hr_round"]),
         Application.updated_at < cutoff
     ).order_by(Application.updated_at).all()
@@ -34,14 +32,13 @@ def get_overdue_applications(db: Session, days: int = 3) -> List[Dict]:
     ]
 
 
-def get_upcoming_interviews(db: Session, days: int = 3) -> List[Dict]:
+def get_upcoming_interviews(db: Session, user_id: str, days: int = 3) -> List[Dict]:
     """获取即将到来的面试"""
-    settings = get_settings()
     today = datetime.now().date()
     future = today + timedelta(days=days)
     
     apps = db.query(Application).filter(
-        Application.user_id == settings.default_user_id,
+        Application.user_id == user_id,
         Application.status.in_(["first_interview", "second_interview", "hr_round"]),
         Application.next_action_date.isnot(None),
         Application.next_action_date >= today,
@@ -62,11 +59,10 @@ def get_upcoming_interviews(db: Session, days: int = 3) -> List[Dict]:
     ]
 
 
-def get_company_interview_articles(company: str, db: Session, limit: int = 5) -> List[Dict]:
+def get_company_interview_articles(company: str, db: Session, user_id: str, limit: int = 5) -> List[Dict]:
     """获取某公司的面经"""
-    settings = get_settings()
     articles = db.query(InterviewArticle).filter(
-        InterviewArticle.user_id == settings.default_user_id,
+        InterviewArticle.user_id == user_id,
         InterviewArticle.company.ilike(f"%{company}%")
     ).order_by(InterviewArticle.created_at.desc()).limit(limit).all()
     
@@ -83,10 +79,10 @@ def get_company_interview_articles(company: str, db: Session, limit: int = 5) ->
     ]
 
 
-def get_reminders(db: Session) -> Dict:
+def get_reminders(db: Session, user_id: str) -> Dict:
     """获取所有提醒汇总"""
-    overdue = get_overdue_applications(db)
-    upcoming = get_upcoming_interviews(db)
+    overdue = get_overdue_applications(db, user_id)
+    upcoming = get_upcoming_interviews(db, user_id)
     
     return {
         "overdue": overdue,

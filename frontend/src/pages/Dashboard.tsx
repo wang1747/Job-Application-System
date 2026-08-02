@@ -1,7 +1,7 @@
 import { type FC, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { STATUS_LABELS } from "../constants/application";
-import type { Application, ApplicationStats, MatchResult, Reminders } from "../types";
+import type { Application, ApplicationStats, MatchResult, Reminders, User } from "../types";
 
 const formatDate = (iso?: string) => {
   if (!iso) return "-";
@@ -10,6 +10,7 @@ const formatDate = (iso?: string) => {
 };
 
 const Dashboard: FC = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState("检查中...");
   const [apps, setApps] = useState<Application[]>([]);
   const [stats, setStats] = useState<ApplicationStats | null>(null);
@@ -18,12 +19,14 @@ const Dashboard: FC = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [appsRes, statsRes, remindRes, rankRes] = await Promise.all([
+      const [userRes, appsRes, statsRes, remindRes, rankRes] = await Promise.all([
+        api.auth.me(),
         api.applications.list(),
         api.applications.stats(),
         api.applications.reminders(),
         api.match.rankings(),
       ]);
+      if (userRes.success && userRes.data) setUser(userRes.data);
       if (appsRes.success && appsRes.data) setApps(appsRes.data);
       if (statsRes.success && statsRes.data) setStats(statsRes.data);
       if (remindRes.success && remindRes.data) setReminders(remindRes.data);
@@ -70,7 +73,10 @@ const Dashboard: FC = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">总览</h1>
+        <div>
+          <h1 className="text-2xl font-bold">👋 欢迎回来{user ? `，${user.name}` : ""}！</h1>
+          <p className="text-gray-500 text-sm mt-1">这是你的求职仪表盘，快速了解整体进展。</p>
+        </div>
         <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
           health === "ok" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
         }`}>

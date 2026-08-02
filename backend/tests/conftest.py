@@ -88,7 +88,7 @@ def db_session():
 
 
 @pytest.fixture
-def client(tmp_path):
+def auth_client(tmp_path):
     """FastAPI TestClient 实例：临时文件数据库 + 离线 LLM，线程安全"""
     from app.config import get_settings
     settings = get_settings()
@@ -117,6 +117,18 @@ def client(tmp_path):
         yield c
     app.dependency_overrides.clear()
     engine.dispose()
+
+
+@pytest.fixture
+def client(auth_client):
+    from app.api.routes.auth import get_current_user_required
+
+    def override_current_user():
+        return User(id="default", name="默认用户")
+
+    app.dependency_overrides[get_current_user_required] = override_current_user
+    yield auth_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

@@ -6,7 +6,6 @@ from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.config import get_settings
 from app.models.interview import InterviewArticle, InterviewQuestion, InterviewSession
 from app.models.resume import Resume
 from app.models.jd import JobDescription
@@ -21,12 +20,11 @@ logger = logging.getLogger(__name__)
 _ARTICLE_SORT_FIELDS = {"created_at", "company", "position"}
 
 
-def _find_duplicate(raw_content: str, db: Session) -> Optional[InterviewArticle]:
+def _find_duplicate(raw_content: str, db: Session, user_id: str) -> Optional[InterviewArticle]:
     """按规范化文本相似度查找重复面经（相似度 >= 0.9 视为重复）"""
-    settings = get_settings()
     normalized = re.sub(r"\s+", "", raw_content or "").lower()
     articles = db.query(InterviewArticle).filter(
-        InterviewArticle.user_id == settings.default_user_id
+        InterviewArticle.user_id == user_id
     ).all()
     for article in articles:
         existing = re.sub(r"\s+", "", article.raw_content or "").lower()
@@ -39,17 +37,17 @@ def import_article(
     company: str,
     raw_content: str,
     db: Session,
+    user_id: str,
     position: Optional[str] = None,
     source: str = "manual"
 ) -> Tuple[InterviewArticle, bool]:
     """导入面经文章；返回 (文章, 是否重复)"""
-    settings = get_settings()
-    duplicate = _find_duplicate(raw_content, db)
+    duplicate = _find_duplicate(raw_content, db, user_id)
     if duplicate:
         return duplicate, True
 
     article = InterviewArticle(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         company=company,
         position=position,
         raw_content=raw_content,
@@ -63,6 +61,7 @@ def import_article(
 
 def list_articles(
     db: Session,
+    user_id: str,
     page: int = 1,
     page_size: int = 20,
     company: Optional[str] = None,
@@ -71,9 +70,8 @@ def list_articles(
     sort_order: str = "desc"
 ) -> Tuple[list, int]:
     """获取面经列表（带分页和筛选）"""
-    settings = get_settings()
     query = db.query(InterviewArticle).filter(
-        InterviewArticle.user_id == settings.default_user_id
+        InterviewArticle.user_id == user_id
     )
 
     if company:
@@ -96,18 +94,17 @@ def list_articles(
     return items, total
 
 
-def delete_article(article_id: str, db: Session) -> bool:
+def delete_article(article_id: str, db: Session, user_id: str) -> bool:
     """删除面经"""
-    settings = get_settings()
     article = db.query(InterviewArticle).filter(
         InterviewArticle.id == article_id,
-        InterviewArticle.user_id == settings.default_user_id
+        InterviewArticle.user_id == user_id
     ).first()
     if not article:
         return False
     db.query(InterviewQuestion).filter(
         InterviewQuestion.article_id == article_id,
-        InterviewQuestion.user_id == settings.default_user_id
+        InterviewQuestion.user_id == user_id
     ).delete(synchronize_session=False)
     db.delete(article)
     db.commit()
@@ -116,14 +113,14 @@ def delete_article(article_id: str, db: Session) -> bool:
 
 def get_questions(
     db: Session,
+    user_id: str,
     article_id: Optional[str] = None,
     page: int = 1,
     page_size: int = 20
 ) -> Tuple[list, int]:
     """获取面试题列表（支持按面经筛选）"""
-    settings = get_settings()
     query = db.query(InterviewQuestion).filter(
-        InterviewQuestion.user_id == settings.default_user_id
+        InterviewQuestion.user_id == user_id
     )
 
     if article_id:
@@ -134,12 +131,11 @@ def get_questions(
     return items, total
 
 
-def extract_questions_from_article(article_id: str, db: Session) -> list:
+def extract_questions_from_article(article_id: str, db: Session, user_id: str) -> list:
     """把面经中已提取的题目落库为面试题记录"""
-    settings = get_settings()
     article = db.query(InterviewArticle).filter(
         InterviewArticle.id == article_id,
-        InterviewArticle.user_id == settings.default_user_id
+        InterviewArticle.user_id == user_id
     ).first()
     if not article or not article.questions:
         return []
@@ -155,13 +151,13 @@ def extract_questions_from_article(article_id: str, db: Session) -> list:
         if not question_text:
             continue
         exists = db.query(InterviewQuestion).filter(
-            InterviewQuestion.user_id == settings.default_user_id,
+            InterviewQuestion.user_id == user_id,
             InterviewQuestion.question == question_text
         ).first()
         if exists:
             continue
         question = InterviewQuestion(
-            user_id=settings.default_user_id,
+            user_id=user_id,
             article_id=article_id,
             question=question_text,
             category=category,
@@ -233,27 +229,26 @@ def save_generated_questions(
 def create_interview_session(
     resume_id: str,
     jd_id: str,
-    db: Session
+    db: Session,
+    user_id: str
 ) -> InterviewSession:
     """创建模拟面试会话"""
-    settings = get_settings()
-    
     resume = db.query(Resume).filter(
         Resume.id == resume_id,
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).first()
     if not resume:
         raise ValueError("简历不存在")
     
     jd = db.query(JobDescription).filter(
         JobDescription.id == jd_id,
-        JobDescription.user_id == settings.default_user_id
+        JobDescription.user_id == user_id
     ).first()
     if not jd:
         raise ValueError("JD不存在")
     
     session = InterviewSession(
-        user_id=settings.default_user_id,
+        user_id=user_id,
         resume_id=resume_id,
         jd_id=jd_id,
         status="active",
@@ -277,27 +272,26 @@ def create_interview_session(
     return session
 
 
-def get_interview_session(session_id: str, db: Session) -> Optional[InterviewSession]:
+def get_interview_session(session_id: str, db: Session, user_id: str) -> Optional[InterviewSession]:
     """获取会话"""
-    settings = get_settings()
     return db.query(InterviewSession).filter(
         InterviewSession.id == session_id,
-        InterviewSession.user_id == settings.default_user_id
+        InterviewSession.user_id == user_id
     ).first()
 
 
 def submit_interview_answer(
     session_id: str,
     answer: str,
-    db: Session
+    db: Session,
+    user_id: str
 ) -> Tuple[Optional[str], Optional[str], bool]:
     """
     提交回答，返回反馈和下一题
     """
-    settings = get_settings()
     session = db.query(InterviewSession).filter(
         InterviewSession.id == session_id,
-        InterviewSession.user_id == settings.default_user_id
+        InterviewSession.user_id == user_id
     ).first()
     
     if not session:
@@ -308,11 +302,11 @@ def submit_interview_answer(
     
     resume = db.query(Resume).filter(
         Resume.id == session.resume_id,
-        Resume.user_id == settings.default_user_id
+        Resume.user_id == user_id
     ).first()
     jd = db.query(JobDescription).filter(
         JobDescription.id == session.jd_id,
-        JobDescription.user_id == settings.default_user_id
+        JobDescription.user_id == user_id
     ).first()
     if not resume or not jd:
         raise ValueError("会话关联的简历或JD不存在")
@@ -350,9 +344,9 @@ def submit_interview_answer(
     return feedback, next_question, False
 
 
-def get_interview_summary(session_id: str, db: Session) -> Optional[dict]:
+def get_interview_summary(session_id: str, db: Session, user_id: str) -> Optional[dict]:
     """获取面试总结"""
-    session = get_interview_session(session_id, db)
+    session = get_interview_session(session_id, db, user_id)
     if not session:
         return None
     

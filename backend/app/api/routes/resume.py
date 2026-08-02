@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
-from app.services.resume_service import list_resumes, upload_resume
+from app.services.resume_service import list_resumes, upload_resume, get_resume_versions, save_optimized_version
 from app.agents.tools.resume_parser import parse_resume_bytes
 from app.agents.graphs.resume_optimize import optimize_resume
 from app.agents.tools.ats_checker import check_ats_compatibility
 from app.models.resume import Resume
-from app.services.resume_service import get_resume_versions, save_optimized_version
-from app.config import get_settings
+from app.api.routes.auth import get_current_user_required
+from app.models.user import User
 
 router = APIRouter()
 
@@ -22,23 +22,26 @@ class ResumeUploadRequest(BaseModel):
 
 @router.get("/list")
 async def get_resume_list(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
     """获取简历列表"""
-    resumes = list_resumes(db)
+    resumes = list_resumes(db, user_id=current_user.id)
     return {"success": True, "data": resumes, "error": None}
 
 
 @router.post("/upload")
 async def upload_resume_endpoint(
     req: ResumeUploadRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
     """上传简历文本"""
     resume = upload_resume(
         raw_text=req.raw_text,
         source_file=req.source_file,
-        db=db
+        db=db,
+        user_id=current_user.id
     )
     return {"success": True, "data": {"id": resume.id, "version": resume.version}, "error": None}
 
@@ -46,7 +49,8 @@ async def upload_resume_endpoint(
 @router.post("/upload-file")
 async def upload_resume_file(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
     """上传简历文件（PDF/MD/TXT）"""
     content = await file.read()
@@ -59,7 +63,8 @@ async def upload_resume_file(
     resume = upload_resume(
         raw_text=raw_text,
         source_file=file.filename,
-        db=db
+        db=db,
+        user_id=current_user.id
     )
     
     return {
@@ -76,10 +81,11 @@ async def upload_resume_file(
 @router.get("/{resume_id}/versions")
 async def get_resume_versions_endpoint(
     resume_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
     """获取简历版本历史"""
-    versions = get_resume_versions(resume_id, db)
+    versions = get_resume_versions(resume_id, db, user_id=current_user.id)
     if versions is None:
         raise HTTPException(status_code=404, detail="简历不存在")
     return {
@@ -107,13 +113,14 @@ class ResumeOptimizeRequest(BaseModel):
 @router.post("/optimize")
 async def optimize_resume_endpoint(
     req: ResumeOptimizeRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
     """针对 JD 优化简历"""
     # 获取简历
     resume = db.query(Resume).filter(
         Resume.id == req.resume_id,
-        Resume.user_id == get_settings().default_user_id
+        Resume.user_id == current_user.id
     ).first()
     
     if not resume:
@@ -129,7 +136,13 @@ async def optimize_resume_endpoint(
     changes = result.get("changes", [])
     new_version = None
     if optimized and optimized.strip():
-        new_version = save_optimized_version(req.resume_id, optimized, changes, db)
+        new_version = save_optimized_version(
+            req.resume_id,
+            optimized,
+            changes,
+            db,
+            user_id=current_user.id
+        )
     
     return {
         "success": True,
