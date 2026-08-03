@@ -193,3 +193,18 @@ export interface SimulateAnswer {
   is_finished: boolean;
   question_number: number;
 }
+
+// ===== 模型设置（BYOK） =====
+export interface PresetProvider {
+  key: string;
+  base_url: string;
+  model: string;
+}
+
+export interface ModelConfig {
+  provider: string;
+  base_url: string;
+  model: string;
+  api_key_masked: string;
+  has_config: boolean;
+}

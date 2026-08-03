@@ -35,6 +35,14 @@ def init_db():
     inspector = inspect(engine)
     if "users" in inspector.get_table_names():
         columns = {column["name"] for column in inspector.get_columns("users")}
-        if "hashed_password" not in columns:
+        for column in (
+            "hashed_password",
+            "llm_provider",
+            "llm_base_url",
+            "llm_model",
+            "encrypted_api_key",
+        ):
+            if column in columns:
+                continue
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN hashed_password VARCHAR"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {column} VARCHAR"))

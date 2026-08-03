@@ -63,11 +63,13 @@ def _fake_llm(monkeypatch):
     import app.agents.graphs.jd_analysis as jd_analysis
     import app.agents.graphs.mock_interview as mock_interview
     import app.agents.graphs.resume_optimize as resume_optimize
+    import app.services.interview_service as interview_service
 
-    monkeypatch.setattr(jd_analysis, "_get_llm", lambda: fake)
-    monkeypatch.setattr(resume_optimize, "get_llm", lambda: fake)
-    monkeypatch.setattr(interview_prep, "get_llm", lambda: fake)
-    monkeypatch.setattr(mock_interview, "get_llm", lambda: fake)
+    monkeypatch.setattr(jd_analysis, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(resume_optimize, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(interview_prep, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(mock_interview, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(interview_service, "get_user_llm_or_raise", lambda user: fake)
     return fake
 
 

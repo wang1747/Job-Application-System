@@ -34,9 +34,14 @@ export const useAuthStore = create<AuthState>((set) => ({
         localStorage.removeItem(TOKEN_KEY);
         set({ token: null, user: null, isAuthenticated: false });
       }
-    } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      set({ token: null, user: null, isAuthenticated: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("Not authenticated") || message.includes("401")) {
+        localStorage.removeItem(TOKEN_KEY);
+        set({ token: null, user: null, isAuthenticated: false });
+      } else {
+        set({ token, isAuthenticated: true });
+      }
     }
   },
 

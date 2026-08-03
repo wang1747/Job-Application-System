@@ -3,8 +3,10 @@
 import logging
 import re
 
-from app.core.llm import get_llm
 from langchain_core.messages import SystemMessage, HumanMessage
+
+from app.core.llm import get_user_llm_or_raise
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +26,6 @@ EVALUATOR_PROMPT = """你是资深面试官，请给出专业反馈。
 
 只输出反馈内容，不要有其他文字。"""
 
-def _clean_text(text: str) -> str:
-    """清洗 LLM 输出"""
-    if not text:
-        return ""
-    text = re.sub(r"^```json\s*", "", text.strip())
-    text = re.sub(r"^```\s*", "", text)
-    text = re.sub(r"```$", "", text)
-    return text.strip()
-
-
 SUMMARIZER_PROMPT = """你是资深面试官，请根据整场模拟面试的题目、回答和逐题反馈，给出一份总结。
 
 要求：
@@ -44,10 +36,21 @@ SUMMARIZER_PROMPT = """你是资深面试官，请根据整场模拟面试的题
 只输出总结内容，不要有其他文字。"""
 
 
+def _clean_text(text: str) -> str:
+    """清洗 LLM 输出"""
+    if not text:
+        return ""
+    text = re.sub(r"^```json\s*", "", text.strip())
+    text = re.sub(r"^```\s*", "", text)
+    text = re.sub(r"```$", "", text)
+    return text.strip()
+
+
 def generate_interview_summary(
     questions: list,
     answers: list,
-    feedbacks: list
+    feedbacks: list,
+    user: User
 ) -> str:
     """生成整场面试总结"""
     if not questions or not answers:
@@ -64,11 +67,15 @@ def generate_interview_summary(
     prompt = "整场模拟面试记录：\n" + "\n".join(conversation)
 
     try:
-        response = get_llm().invoke([
+        llm = get_user_llm_or_raise(user)
+        response = llm.invoke([
             SystemMessage(content=SUMMARIZER_PROMPT),
             HumanMessage(content=prompt),
         ])
         return _clean_text(response.content)
+    except ValueError as e:
+        logger.warning(f"生成面试总结失败: {e}")
+        return "请先完成模型设置"
     except Exception as e:
         logger.error(f"生成面试总结失败: {e}")
         return "面试已完成，请查看逐题反馈。"
@@ -77,6 +84,7 @@ def generate_interview_summary(
 def generate_question(
     resume_text: str,
     jd_text: str,
+    user: User,
     previous_question: str = "",
     previous_answer: str = ""
 ) -> str:
@@ -91,17 +99,25 @@ def generate_question(
     prompt += "\n\n只输出问题内容，不要有其他文字。"
 
     try:
-        response = get_llm().invoke([
+        llm = get_user_llm_or_raise(user)
+        response = llm.invoke([
             SystemMessage(content=INTERVIEWER_PROMPT),
             HumanMessage(content=prompt),
         ])
         return _clean_text(response.content)
+    except ValueError as e:
+        logger.warning(f"生成问题失败: {e}")
+        return "请先完成模型设置"
     except Exception as e:
         logger.error(f"生成问题失败: {e}")
         return "请介绍一下你最自豪的项目经历。"
 
 
-def evaluate_answer(question: str, answer: str) -> str:
+def evaluate_answer(
+    question: str,
+    answer: str,
+    user: User
+) -> str:
     """评估回答"""
     prompt = f"""面试问题：{question}
 
@@ -110,11 +126,15 @@ def evaluate_answer(question: str, answer: str) -> str:
 请给出专业、简洁的反馈（50字以内），包括优点和改进建议。"""
 
     try:
-        response = get_llm().invoke([
+        llm = get_user_llm_or_raise(user)
+        response = llm.invoke([
             SystemMessage(content=EVALUATOR_PROMPT),
             HumanMessage(content=prompt),
         ])
         return _clean_text(response.content)
+    except ValueError as e:
+        logger.warning(f"评估回答失败: {e}")
+        return "请先完成模型设置"
     except Exception as e:
         logger.error(f"评估回答失败: {e}")
         return "回答不错，继续加油！"

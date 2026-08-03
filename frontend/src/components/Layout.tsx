@@ -20,8 +20,10 @@ const Layout: FC<LayoutProps> = ({ children }) => {
             ? "resume"
             : location.pathname.startsWith("/interview")
               ? "interview"
-              : location.pathname.startsWith("/applications")
-                ? "applications"
+            : location.pathname.startsWith("/applications")
+              ? "applications"
+              : location.pathname.startsWith("/settings")
+                ? "settings"
                 : "dashboard";
 
   return (

@@ -13,9 +13,23 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     columns = {column["name"] for column in inspector.get_columns("users")}
-    if "hashed_password" not in columns:
-        op.add_column("users", sa.Column("hashed_password", sa.String(), nullable=True))
+    for column in (
+        "hashed_password",
+        "llm_provider",
+        "llm_base_url",
+        "llm_model",
+        "encrypted_api_key",
+    ):
+        if column not in columns:
+            op.add_column("users", sa.Column(column, sa.String(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("users", "hashed_password")
+    for column in (
+        "hashed_password",
+        "llm_provider",
+        "llm_base_url",
+        "llm_model",
+        "encrypted_api_key",
+    ):
+        op.drop_column("users", column)

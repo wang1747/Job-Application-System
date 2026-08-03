@@ -14,6 +14,7 @@ const navItems = [
   { key: "resume", label: "📝 简历优化", path: "/resume" },
   { key: "interview", label: "🎯 面试准备", path: "/interview" },
   { key: "applications", label: "📋 投递追踪", path: "/applications" },
+  { key: "settings", label: "⚙️ 模型设置", path: "/settings" },
 ];
 
 const Sidebar: FC<SidebarProps> = ({ active, onNavigate }) => {

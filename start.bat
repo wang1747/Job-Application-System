@@ -22,9 +22,14 @@ if not exist "%ROOT_DIR%.venv\Scripts\python.exe" (
 if not exist "%ROOT_DIR%.env" (
     echo [WARN] .env not found. Copied from .env.example.
     copy "%ROOT_DIR%.env.example" "%ROOT_DIR%.env" >nul
-    echo [ERROR] Please set DEEPSEEK_API_KEY in .env, then run again.
+    echo [ERROR] Please fill required environment variables in .env, then run again.
     pause
     exit /b 1
+)
+
+findstr /B /C:"ENCRYPTION_KEY=" "%ROOT_DIR%.env" >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] ENCRYPTION_KEY not found in .env. Model settings cannot save API keys.
 )
 
 if not exist "%ROOT_DIR%frontend\node_modules" (
@@ -59,7 +64,7 @@ if not errorlevel 1 (
 REM --- Start services ---
 if "!SKIP_BACKEND!"=="0" (
     echo [1/2] Starting backend on port %BACKEND_PORT% ...
-    start "OfferFlow Backend" cmd /k "cd /d ""%ROOT_DIR%"" && .venv\Scripts\python.exe run.py"
+    start "OfferFlow Backend" cmd /k "cd /d ""%ROOT_DIR%"" && set UVICORN_RELOAD=true && set PORT=%BACKEND_PORT% && .venv\Scripts\python.exe run.py"
 )
 
 if "!SKIP_FRONTEND!"=="0" (
@@ -91,6 +96,7 @@ echo.
 echo ==========================================
 echo   Startup finished!
 echo   Backend:  http://127.0.0.1:%BACKEND_PORT%
+echo   API Docs: http://127.0.0.1:%BACKEND_PORT%/docs
 echo   Frontend: http://127.0.0.1:%FRONTEND_PORT%
 echo ==========================================
 echo.

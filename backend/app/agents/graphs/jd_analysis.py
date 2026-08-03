@@ -1,10 +1,15 @@
 import json
+import logging
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 
-from app.core.llm import get_llm
+from app.core.llm import get_user_llm_or_raise
+from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 def _clean_json_response(raw: str) -> str:
@@ -22,18 +27,11 @@ class JDState(TypedDict):
     error: str
 
 
-_llm_instance = None
-
-
-def _get_llm():
-    global _llm_instance
-    if _llm_instance is None:
-        _llm_instance = get_llm()
-    return _llm_instance
-
-
-def parse_jd_node(state: JDState) -> JDState:
+def parse_jd_node(state: JDState, config: RunnableConfig | None) -> JDState:
     """Parse JD text into structured JSON"""
+    user = (config or {}).get("configurable", {}).get("user")
+    if user is None:
+        raise ValueError("未找到当前用户")
     raw_text = state["raw_text"]
     system_prompt = (
         "You are a professional JD parser. Extract structured info from the JD text.\n"
@@ -49,13 +47,21 @@ def parse_jd_node(state: JDState) -> JDState:
         "If a field cannot be extracted, use empty string or empty list."
     )
     try:
-        response = _get_llm().invoke([
+        # 获取用户配置的 LLM
+        llm = get_user_llm_or_raise(user)
+
+        response = llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=raw_text),
         ])
         parsed = json.loads(_clean_json_response(response.content))
         return {"raw_text": state["raw_text"], "parsed": parsed, "error": ""}
+    except ValueError as e:
+        # 用户未配置 LLM
+        logger.warning(f"JD 解析失败: {e}")
+        return {"raw_text": state["raw_text"], "parsed": {}, "error": str(e)}
     except Exception as e:
+        logger.error(f"JD 解析异常: {e}")
         return {"raw_text": state["raw_text"], "parsed": {}, "error": str(e)}
 
 
@@ -70,8 +76,9 @@ def create_jd_analysis_graph():
 jd_analysis_graph = create_jd_analysis_graph()
 
 
-async def analyze_jd(raw_text: str) -> dict:
-    """Execute JD analysis"""
+async def analyze_jd(raw_text: str, user: User) -> dict:
+    """Execute JD analysis with user-specific LLM config"""
     initial_state = {"raw_text": raw_text, "parsed": {}, "error": ""}
-    result = await jd_analysis_graph.ainvoke(initial_state)
+    # 将 user 作为配置传递
+    result = await jd_analysis_graph.ainvoke(initial_state, config={"configurable": {"user": user}})
     return result

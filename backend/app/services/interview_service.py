@@ -9,11 +9,13 @@ from sqlalchemy import desc
 from app.models.interview import InterviewArticle, InterviewQuestion, InterviewSession
 from app.models.resume import Resume
 from app.models.jd import JobDescription
+from app.models.user import User
 from app.agents.graphs.mock_interview import (
     generate_question,
     evaluate_answer,
     generate_interview_summary,
 )
+from app.core.llm import get_user_llm_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +179,9 @@ def _clean_json_response(raw: str) -> str:
     return raw.strip()
 
 
-def extract_article_metadata(raw_content: str) -> dict:
+def extract_article_metadata(raw_content: str, user: User) -> dict:
     """用 LLM 从面经中提取题目、标签和难度；失败时返回空结果"""
     from langchain_core.messages import HumanMessage, SystemMessage
-    from app.core.llm import get_llm
 
     system_prompt = (
         "你是面经整理助手。从面经内容中提取结构化信息，只输出 JSON：\n"
@@ -188,7 +189,8 @@ def extract_article_metadata(raw_content: str) -> dict:
         "提取不到时用空数组，难度无法判断时为 null。"
     )
     try:
-        response = get_llm().invoke([
+        llm = get_user_llm_or_raise(user)
+        response = llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=raw_content or ""),
         ])
@@ -198,7 +200,11 @@ def extract_article_metadata(raw_content: str) -> dict:
             "tags": parsed.get("tags", []) if isinstance(parsed.get("tags"), list) else [],
             "difficulty": parsed.get("difficulty"),
         }
-    except Exception:
+    except ValueError as e:
+        logger.warning(f"提取面经元数据失败（用户未配置LLM）: {e}")
+        return {"questions": [], "tags": [], "difficulty": None}
+    except Exception as e:
+        logger.error(f"提取面经元数据异常: {e}")
         return {"questions": [], "tags": [], "difficulty": None}
 
 
@@ -230,7 +236,8 @@ def create_interview_session(
     resume_id: str,
     jd_id: str,
     db: Session,
-    user_id: str
+    user_id: str,
+    user: User
 ) -> InterviewSession:
     """创建模拟面试会话"""
     resume = db.query(Resume).filter(
@@ -263,7 +270,8 @@ def create_interview_session(
     
     first_question = generate_question(
         resume_text=resume.raw_text,
-        jd_text=jd.raw_text
+        jd_text=jd.raw_text,
+        user=user
     )
     session.current_question = first_question
     session.questions = [first_question]
@@ -284,7 +292,8 @@ def submit_interview_answer(
     session_id: str,
     answer: str,
     db: Session,
-    user_id: str
+    user_id: str,
+    user: User
 ) -> Tuple[Optional[str], Optional[str], bool]:
     """
     提交回答，返回反馈和下一题
@@ -317,7 +326,8 @@ def submit_interview_answer(
     
     feedback = evaluate_answer(
         question=session.current_question,
-        answer=answer
+        answer=answer,
+        user=user
     )
     current_feedbacks = list(session.feedbacks or [])
     current_feedbacks.append(feedback)
@@ -332,6 +342,7 @@ def submit_interview_answer(
     next_question = generate_question(
         resume_text=resume.raw_text,
         jd_text=jd.raw_text,
+        user=user,
         previous_question=session.current_question,
         previous_answer=answer
     )
@@ -344,7 +355,7 @@ def submit_interview_answer(
     return feedback, next_question, False
 
 
-def get_interview_summary(session_id: str, db: Session, user_id: str) -> Optional[dict]:
+def get_interview_summary(session_id: str, db: Session, user_id: str, user: User) -> Optional[dict]:
     """获取面试总结"""
     session = get_interview_session(session_id, db, user_id)
     if not session:
@@ -356,6 +367,7 @@ def get_interview_summary(session_id: str, db: Session, user_id: str) -> Optiona
             questions=session.questions or [],
             answers=session.answers or [],
             feedbacks=session.feedbacks or [],
+            user=user
         )
 
     return {

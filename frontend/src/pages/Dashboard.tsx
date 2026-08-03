@@ -1,4 +1,5 @@
 import { type FC, useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { STATUS_LABELS } from "../constants/application";
 import type { Application, ApplicationStats, MatchResult, Reminders, User } from "../types";
@@ -10,6 +11,7 @@ const formatDate = (iso?: string) => {
 };
 
 const Dashboard: FC = () => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState("检查中...");
   const [apps, setApps] = useState<Application[]>([]);
@@ -36,6 +38,19 @@ const Dashboard: FC = () => {
     }
   }, []);
 
+  const checkModelConfig = useCallback(async () => {
+    try {
+      const res = await api.modelConfig.get();
+      if (res.success && res.data) {
+        if (!res.data.has_config) {
+          navigate("/settings");
+        }
+      }
+    } catch (err) {
+      console.error("检查模型配置失败:", err);
+    }
+  }, [navigate]);
+
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +62,7 @@ const Dashboard: FC = () => {
         setHealth(res.data?.status || "未连接");
         if (res.data?.status === "ok") {
           await loadAll();
+          await checkModelConfig();
         } else {
           timer = setTimeout(checkHealth, 3000);
         }
@@ -62,7 +78,7 @@ const Dashboard: FC = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [loadAll]);
+  }, [loadAll, checkModelConfig]);
 
   const offerCount =
     (stats?.status_counts.offered || 0) + (stats?.status_counts.accepted || 0);

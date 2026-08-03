@@ -3,11 +3,16 @@
 from sqlalchemy.orm import Session
 
 from app.models.jd import JobDescription
+from app.models.user import User
 from app.agents.graphs.jd_analysis import analyze_jd
 
 
 async def parse_and_save(raw_text: str, db: Session, user_id: str) -> dict:
-    result = await analyze_jd(raw_text)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"success": False, "data": None, "error": "用户不存在"}
+
+    result = await analyze_jd(raw_text, user)
     if result.get("error"):
         return {"success": False, "data": None, "error": result["error"]}
 

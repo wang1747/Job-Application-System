@@ -124,7 +124,7 @@ async def import_article_endpoint(
         db=db,
         user_id=current_user.id
     )
-    metadata = extract_article_metadata(req.raw_content)
+    metadata = extract_article_metadata(req.raw_content, user=current_user)
     article.questions = metadata["questions"]
     article.tags = metadata["tags"]
     article.difficulty = metadata["difficulty"]
@@ -171,7 +171,7 @@ async def upload_article_file(
         db=db,
         user_id=current_user.id
     )
-    metadata = extract_article_metadata(raw_content)
+    metadata = extract_article_metadata(raw_content, user=current_user)
     article.questions = metadata["questions"]
     article.tags = metadata["tags"]
     article.difficulty = metadata["difficulty"]
@@ -307,6 +307,7 @@ async def generate_questions_endpoint(
     result = await generate_interview_questions(
         resume_text=resume.raw_text,
         jd_text=jd.raw_text,
+        user=current_user,
         article_content=article_content,
         limit=req.limit
     )
@@ -347,7 +348,8 @@ async def start_simulate(
             resume_id=req.resume_id,
             jd_id=req.jd_id,
             db=db,
-            user_id=current_user.id
+            user_id=current_user.id,
+            user=current_user
         )
         logger.info(f"用户 {current_user.id} 开始模拟面试: session={session.id}")
         return {
@@ -385,7 +387,8 @@ async def submit_answer_endpoint(
             session_id=session_id,
             answer=req.answer,
             db=db,
-            user_id=current_user.id
+            user_id=current_user.id,
+            user=current_user
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -418,7 +421,7 @@ async def get_summary_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_required)
 ):
-    summary = get_interview_summary(session_id, db, user_id=current_user.id)
+    summary = get_interview_summary(session_id, db, user_id=current_user.id, user=current_user)
     if not summary:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     return {"success": True, "data": summary, "error": None}

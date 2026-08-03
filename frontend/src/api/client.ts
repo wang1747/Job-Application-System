@@ -15,6 +15,8 @@ import type {
   SimulateAnswer,
   SimulateSession,
   User,
+  PresetProvider,
+  ModelConfig,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -285,5 +287,23 @@ export const api = {
       request<InterviewArticle[]>(
         `/api/v1/applications/${id}/interview-articles`,
       ),
+  },
+
+  modelConfig: {
+    presets: () => request<PresetProvider[]>("/api/v1/user/model-config/presets"),
+    get: () => request<ModelConfig>("/api/v1/user/model-config/"),
+    save: (payload: { provider: string; base_url: string; model: string; api_key: string }) =>
+      request<{ message: string; config: ModelConfig }>("/api/v1/user/model-config/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    test: (payload: { base_url: string; model: string; api_key: string }) =>
+      request<{ message: string }>("/api/v1/user/model-config/test", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    clear: () => request<{ message: string }>("/api/v1/user/model-config/", {
+      method: "DELETE",
+    }),
   },
 };

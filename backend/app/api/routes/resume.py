@@ -126,8 +126,12 @@ async def optimize_resume_endpoint(
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
     
-    # 执行优化
-    result = await optimize_resume(resume.raw_text, req.jd_text)
+    # 执行优化 - 传入 current_user
+    result = await optimize_resume(
+        resume_text=resume.raw_text,
+        jd_text=req.jd_text,
+        user=current_user
+    )
     
     if result.get("error"):
         return {"success": False, "data": None, "error": result["error"]}

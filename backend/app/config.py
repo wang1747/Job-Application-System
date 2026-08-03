@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 import warnings
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -18,7 +19,10 @@ class Settings(BaseSettings):
     )
 
     # ===== LLM 配置 =====
-    deepseek_api_key: SecretStr = Field(..., description="DeepSeek API Key")
+    deepseek_api_key: Optional[SecretStr] = Field(
+        default=None,
+        description="DeepSeek API Key（用户自带 Key 后不再需要服务器默认 Key）"
+    )
     deepseek_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
 
@@ -48,6 +52,12 @@ class Settings(BaseSettings):
         description="访问令牌有效期（分钟），默认 7 天"
     )
 
+    # ===== 加密配置（BYOK） =====
+    encryption_key: Optional[str] = Field(
+        default=None,
+        description="加密密钥（用于 API Key 加密存储），生产环境必须配置 32 位以上字符串"
+    )
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
@@ -70,6 +80,13 @@ class Settings(BaseSettings):
         """限制仅允许 HS256"""
         if v not in ("HS256",):
             raise ValueError("仅支持 HS256 签名算法")
+        return v
+
+    @field_validator("encryption_key")
+    def validate_encryption_key(cls, v: Optional[str]):
+        """校验加密密钥长度"""
+        if v is not None and len(v) < 32:
+            raise ValueError("ENCRYPTION_KEY 长度不能小于32位")
         return v
 
     @model_validator(mode="after")

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from app.api.routes.model_config import router as model_config_router
 
 from .config import get_settings
 from .core.database import init_db, SessionLocal
@@ -55,6 +56,7 @@ app.include_router(match.router)
 app.include_router(interview.router)
 app.include_router(application.router)
 app.include_router(auth.router)
+app.include_router(model_config_router)
 
 
 @app.get("/api/health")

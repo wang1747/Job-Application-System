@@ -7,8 +7,10 @@ from typing import TypedDict, List
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 
-from app.core.llm import get_llm
+from app.core.llm import get_user_llm_or_raise
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,6 @@ class InterviewState(TypedDict):
 
 def _clean_json_response(raw: str) -> str:
     """清洗 LLM 输出的 JSON 字符串"""
-    # 移除 markdown 代码块标记
     raw = re.sub(r"^```json\s*", "", raw.strip())
     raw = re.sub(r"^```\s*", "", raw)
     raw = re.sub(r"```$", "", raw)
@@ -62,11 +63,13 @@ def _validate_question(item: dict) -> bool:
     return True
 
 
-def generate_questions_node(state: InterviewState) -> InterviewState:
-    """基于简历 + JD + 面经生成面试题（同步节点）"""
+def generate_questions_node(state: InterviewState, config: RunnableConfig | None) -> InterviewState:
+    """基于简历 + JD + 面经生成面试题"""
+    user = (config or {}).get("configurable", {}).get("user")
+    if user is None:
+        raise ValueError("未找到当前用户")
     logger.info("开始生成面试题")
 
-    # 构建 prompt
     prompt = f"""【简历】\n{state['resume_text']}\n\n【目标JD】\n{state['jd_text']}"""
 
     if state.get("article_content"):
@@ -76,7 +79,8 @@ def generate_questions_node(state: InterviewState) -> InterviewState:
         prompt += f"\n\n请生成最多 {state['limit']} 道题目。"
 
     try:
-        response = get_llm().invoke([
+        llm = get_user_llm_or_raise(user)
+        response = llm.invoke([
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=prompt),
         ])
@@ -88,12 +92,18 @@ def generate_questions_node(state: InterviewState) -> InterviewState:
         parsed = json.loads(cleaned)
 
         questions = parsed.get("questions", [])
-        # 校验并过滤有效题目
         valid_questions = [q for q in questions if _validate_question(q)]
-        logger.info(f"生成 {len(valid_questions)} 道有效题目")
 
+        # 按 limit 截断
+        if state.get("limit", 0) > 0 and len(valid_questions) > state["limit"]:
+            valid_questions = valid_questions[:state["limit"]]
+
+        logger.info(f"生成 {len(valid_questions)} 道有效题目")
         return {**state, "questions": valid_questions, "error": ""}
 
+    except ValueError as e:
+        logger.warning(f"面试题生成失败: {e}")
+        return {**state, "questions": [], "error": str(e)}
     except json.JSONDecodeError as e:
         logger.error(f"JSON 解析失败: {e}")
         return {**state, "questions": [], "error": "面试题生成格式异常，请重试"}
@@ -111,13 +121,13 @@ def create_interview_prep_graph():
     return workflow.compile()
 
 
-# 全局 Graph 实例
 interview_prep_graph = create_interview_prep_graph()
 
 
 async def generate_interview_questions(
     resume_text: str,
     jd_text: str,
+    user: User,
     article_content: str = "",
     limit: int = 10
 ) -> dict:
@@ -127,6 +137,7 @@ async def generate_interview_questions(
     Args:
         resume_text: 简历文本
         jd_text: JD 文本
+        user: 当前登录用户
         article_content: 面经参考内容（可选）
         limit: 生成题目数量上限
 
@@ -141,5 +152,8 @@ async def generate_interview_questions(
         "questions": [],
         "error": ""
     }
-    result = await interview_prep_graph.ainvoke(initial)
+    result = await interview_prep_graph.ainvoke(
+        initial,
+        config={"configurable": {"user": user}}
+    )
     return result

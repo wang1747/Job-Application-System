@@ -10,6 +10,7 @@ import MatchAnalysis from "./pages/MatchAnalysis";
 import ResumeOptimize from "./pages/ResumeOptimize";
 import InterviewPrep from "./pages/InterviewPrep";
 import ApplicationTracker from "./pages/ApplicationTracker";
+import ModelSettings from "./pages/ModelSettings";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, initialize } = useAuthStore();
@@ -93,6 +94,16 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <ApplicationTracker />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <ModelSettings />
               </Layout>
             </PrivateRoute>
           }
