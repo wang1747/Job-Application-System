@@ -11,6 +11,7 @@ import ResumeOptimize from "./pages/ResumeOptimize";
 import InterviewPrep from "./pages/InterviewPrep";
 import ApplicationTracker from "./pages/ApplicationTracker";
 import ModelSettings from "./pages/ModelSettings";
+import ModelConfigGate from "./components/ModelConfigGate";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, initialize } = useAuthStore();
@@ -53,7 +54,9 @@ function App() {
           element={
             <PrivateRoute>
               <Layout>
-                <JDAnalysis />
+                <ModelConfigGate>
+                  <JDAnalysis />
+                </ModelConfigGate>
               </Layout>
             </PrivateRoute>
           }
@@ -73,7 +76,9 @@ function App() {
           element={
             <PrivateRoute>
               <Layout>
-                <ResumeOptimize />
+                <ModelConfigGate>
+                  <ResumeOptimize />
+                </ModelConfigGate>
               </Layout>
             </PrivateRoute>
           }
@@ -83,7 +88,9 @@ function App() {
           element={
             <PrivateRoute>
               <Layout>
-                <InterviewPrep />
+                <ModelConfigGate>
+                  <InterviewPrep />
+                </ModelConfigGate>
               </Layout>
             </PrivateRoute>
           }

@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api.routes.model_config import router as model_config_router
+from app.core.exceptions import register_exception_handlers
+from app.core.security import hash_password
 
 from .config import get_settings
 from .core.database import init_db, SessionLocal
@@ -18,10 +20,18 @@ async def lifespan(app: FastAPI):
     try:
         default_user = db.query(User).filter(User.id == settings.default_user_id).first()
         if not default_user:
-            default_user = User(id=settings.default_user_id, name="默认用户")
+            default_user = User(id=settings.default_user_id, name=settings.default_user_name)
             db.add(default_user)
             db.commit()
             print("[OK] 默认用户已创建")
+        elif default_user.name != settings.default_user_name:
+            default_user.name = settings.default_user_name
+            db.commit()
+
+        if not default_user.hashed_password:
+            default_user.hashed_password = hash_password(settings.default_user_password)
+            db.commit()
+            print("[OK] 默认用户密码已初始化")
 
         try:
             from app.seed import seed_demo_data
@@ -58,6 +68,7 @@ app.include_router(application.router)
 app.include_router(auth.router)
 app.include_router(model_config_router)
 
+register_exception_handlers(app)
 
 @app.get("/api/health")
 async def health_check():

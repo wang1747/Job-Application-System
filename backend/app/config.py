@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # ===== 默认用户 =====
     default_user_id: str = "default"
+    default_user_name: str = "demo"
+    default_user_password: str = "demo1234"
 
     # ===== CORS 配置 =====
     cors_origins: str = Field(
