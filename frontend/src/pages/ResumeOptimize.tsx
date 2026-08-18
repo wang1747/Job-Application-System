@@ -109,6 +109,23 @@ const ResumeOptimize: FC = () => {
     }
   };
 
+  const handleExport = async (format: "pdf" | "word") => {
+    if (!selectedId) return;
+    try {
+      const blob = await api.resume.export(selectedId, format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `resume.${format === "pdf" ? "pdf" : "docx"}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败");
+    }
+  };
+
   const selectedResume = resumes.find((item) => item.id === selectedId);
 
   return (
@@ -169,6 +186,22 @@ const ResumeOptimize: FC = () => {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {selectedId && (
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => handleExport("pdf")}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                导出 PDF
+              </button>
+              <button
+                onClick={() => handleExport("word")}
+                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition"
+              >
+                导出 Word
+              </button>
             </div>
           )}
         </section>

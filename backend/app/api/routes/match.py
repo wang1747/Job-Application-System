@@ -8,11 +8,13 @@ from typing import List
 
 # ===== 第三方库 =====
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 # ===== 项目内部 =====
 from app.core.database import get_db
 from app.services.match_service import calculate_match, get_match_detail, get_rankings
+from app.services.jd_service import parse_and_save
 from app.api.routes.auth import get_current_user_required
 from app.models.user import User
 from app.schemas.match import MatchRequest, MatchResponse, RankingItem
@@ -21,6 +23,11 @@ from app.schemas.common import ApiResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/match", tags=["匹配分析模块"])
+
+
+class BatchMatchRequest(BaseModel):
+    resume_id: str = Field(..., min_length=1)
+    jd_texts: List[str] = Field(..., min_length=1)
 
 
 @router.post("")
@@ -45,6 +52,47 @@ async def match(
     except Exception as e:
         logger.error(f"匹配计算未知异常: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="匹配计算失败，请稍后重试")
+
+
+@router.post(
+    "/batch",
+    summary="批量匹配 JD",
+    response_model=ApiResponse[dict],
+    description="批量解析并匹配多个 JD，返回每个 JD 的匹配结果"
+)
+async def batch_match(
+    req: BatchMatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    results = []
+    for index, raw_text in enumerate(req.jd_texts, start=1):
+        text = (raw_text or "").strip()
+        if not text:
+            continue
+        try:
+            parsed = await parse_and_save(raw_text=text, db=db, user_id=current_user.id)
+            if not parsed.get("success") or not parsed.get("data"):
+                results.append({
+                    "index": index,
+                    "success": False,
+                    "error": parsed.get("error", "JD 解析失败"),
+                })
+                continue
+            jd_id = parsed["data"]["id"]
+            match_result = calculate_match(jd_id, req.resume_id, db, user_id=current_user.id)
+            results.append({
+                "index": index,
+                "success": True,
+                "match": MatchResponse.model_validate(match_result),
+            })
+        except ValueError as e:
+            results.append({"index": index, "success": False, "error": str(e)})
+        except Exception as e:
+            logger.error(f"批量匹配异常: {e}")
+            results.append({"index": index, "success": False, "error": "批量匹配失败"})
+
+    return ApiResponse(success=True, data={"results": results}, error=None)
 
 
 @router.get(

@@ -19,6 +19,7 @@ const formatTime = (iso: string) => {
 
 export default function JDAnalysis() {
   const [rawText, setRawText] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ParsedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +96,31 @@ export default function JDAnalysis() {
     }
   };
 
+  const handleOcr = async () => {
+    if (!imageFile) {
+      showError("请选择截图图片");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await api.jd.ocr(imageFile);
+      if (response.success && response.data) {
+        setResult(response.data.parsed);
+        setRawText(response.data.ocr_text || "");
+        await loadHistory();
+        setImageFile(null);
+      } else {
+        showError(response.error || "OCR 识别失败");
+      }
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "OCR 识别失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这条 JD 吗？")) return;
     try {
@@ -160,6 +186,22 @@ export default function JDAnalysis() {
       >
         {loading ? "解析中..." : "开始解析"}
       </button>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <input
+          type="file"
+          accept=".png,.jpg,.jpeg,.bmp,.webp"
+          onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+          className="text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-blue-600 file:text-white"
+        />
+        <button
+          onClick={handleOcr}
+          disabled={loading || !imageFile}
+          className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:bg-gray-400 transition"
+        >
+          OCR 识别导入
+        </button>
+      </div>
 
       {/* 错误提示 */}
       {error && (

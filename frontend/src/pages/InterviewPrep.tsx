@@ -43,6 +43,7 @@ const InterviewPrep: FC = () => {
   const [position, setPosition] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [ocrFile, setOcrFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
 
   const [genResumeId, setGenResumeId] = useState("");
@@ -151,6 +152,40 @@ const InterviewPrep: FC = () => {
       await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "导入失败");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportOcr = async () => {
+    setError("");
+    setMessage("");
+    if (!company.trim() || !ocrFile) {
+      setError("请填写公司名称并选择截图图片");
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await api.interview.ocrArticle(
+        company.trim(),
+        ocrFile,
+        position.trim() || undefined,
+      );
+      if (!res.success) {
+        setError(res.error || "OCR 导入失败");
+        return;
+      }
+      setMessage(
+        res.data?.duplicate
+          ? "检测到重复面经，未重复入库"
+          : `OCR 导入成功，提取 ${res.data?.question_count ?? 0} 道题目`,
+      );
+      setCompany("");
+      setPosition("");
+      setOcrFile(null);
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "OCR 导入失败");
     } finally {
       setImporting(false);
     }
@@ -309,6 +344,13 @@ const InterviewPrep: FC = () => {
                 className="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-blue-600 file:text-white"
                 aria-label="面经文件"
               />
+              <input
+                type="file"
+                accept=".png,.jpg,.jpeg,.bmp,.webp"
+                onChange={(e) => setOcrFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-cyan-600 file:text-white"
+                aria-label="面经截图"
+              />
               <div className="flex gap-3">
                 <button
                   onClick={handleImportText}
@@ -323,6 +365,13 @@ const InterviewPrep: FC = () => {
                   className="px-4 py-2 border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50 disabled:border-gray-400 disabled:text-gray-400 transition"
                 >
                   上传文件
+                </button>
+                <button
+                  onClick={handleImportOcr}
+                  disabled={importing || !ocrFile}
+                  className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:bg-gray-400 transition"
+                >
+                  OCR 导入截图
                 </button>
               </div>
             </div>

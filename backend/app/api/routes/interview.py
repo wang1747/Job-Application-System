@@ -32,8 +32,11 @@ from app.services.interview_service import (
 )
 from app.agents.graphs.interview_prep import generate_interview_questions
 from app.agents.tools.document_parser import parse_article_file
+from app.services.ocr_service import extract_text_from_image_file
 from app.api.routes.auth import get_current_user_required
 from app.models.user import User
+
+from app.services.ocr_service import extract_text_from_image_file
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +193,112 @@ async def upload_article_file(
         "error": None,
     }
 
+
+@router.post(
+    "/articles/ocr",
+    summary="OCR 导入面经截图",
+    description="上传面经图片，自动识别文字并导入面经库"
+)
+async def upload_article_ocr(
+    file: UploadFile = File(...),
+    company: str = File(...),
+    position: Optional[str] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    content = await file.read()
+    try:
+        raw_content = extract_text_from_image_file(content, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    if not raw_content or len(raw_content.strip()) < 10:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OCR 识别结果为空或内容过短")
+
+    article, duplicate = import_article(
+        company=company,
+        position=position,
+        raw_content=raw_content,
+        source="ocr",
+        db=db,
+        user_id=current_user.id
+    )
+    metadata = extract_article_metadata(raw_content, user=current_user)
+    article.questions = metadata["questions"]
+    article.tags = metadata["tags"]
+    article.difficulty = metadata["difficulty"]
+    db.commit()
+    db.refresh(article)
+    saved = extract_questions_from_article(article.id, db, current_user.id) if metadata["questions"] else []
+    logger.info(f"用户 {current_user.id} OCR 导入面经: {file.filename}, article={article.id}")
+    return {
+        "success": True,
+        "data": {
+            "id": article.id,
+            "duplicate": duplicate,
+            "filename": file.filename,
+            "ocr_text": raw_content[:500] + ("..." if len(raw_content) > 500 else ""),
+            "question_count": len(saved),
+        },
+        "error": None,
+    }
+
+@router.post(
+    "/articles/ocr",
+    summary="通过截图 OCR 导入面经",
+    description="上传面经截图，自动识别文字内容并导入"
+)
+async def ocr_import_article(
+    file: UploadFile = File(...),
+    company: str = File(...),
+    position: Optional[str] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """通过截图 OCR 导入面经"""
+    content = await file.read()
+    
+    try:
+        raw_content = extract_text_from_image_file(content, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
+    if not raw_content or len(raw_content.strip()) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OCR 识别结果为空，请确保图片清晰包含文字"
+        )
+    
+    article, duplicate = import_article(
+        company=company,
+        position=position,
+        raw_content=raw_content,
+        source="ocr",
+        db=db,
+        user_id=current_user.id
+    )
+    
+    metadata = extract_article_metadata(raw_content, user=current_user)
+    article.questions = metadata["questions"]
+    article.tags = metadata["tags"]
+    article.difficulty = metadata["difficulty"]
+    db.commit()
+    db.refresh(article)
+    saved = extract_questions_from_article(article.id, db, current_user.id) if metadata["questions"] else []
+    
+    logger.info(f"用户 {current_user.id} 通过 OCR 导入面经: {file.filename}, article={article.id}")
+    
+    return {
+        "success": True,
+        "data": {
+            "id": article.id,
+            "duplicate": duplicate,
+            "filename": file.filename,
+            "ocr_text": raw_content[:500] + ("..." if len(raw_content) > 500 else ""),
+            "question_count": len(saved),
+        },
+        "error": None,
+    }
 
 @router.get(
     "/articles",

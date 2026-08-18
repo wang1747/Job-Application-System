@@ -27,6 +27,7 @@ from app.services.application_service import (
 from app.services.reminder_service import get_company_interview_articles, get_reminders
 from app.api.routes.auth import get_current_user_required
 from app.models.user import User
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,33 @@ async def get_reminders_endpoint(
 ):
     reminders = get_reminders(db, user_id=current_user.id)
     return {"success": True, "data": reminders, "error": None}
+
+
+@router.get("/reminders/export", summary="导出提醒供 n8n 使用")
+async def export_reminders_for_n8n(
+    token: str = Query(..., description="服务令牌"),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    if token != settings.reminder_service_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
+
+    users = db.query(User).all()
+    data = []
+    for user in users:
+        reminders = get_reminders(db, user.id)
+        for section in ("overdue", "upcoming"):
+            for item in reminders.get(section, []):
+                item["interview_articles"] = get_company_interview_articles(
+                    item["company"],
+                    db,
+                    user.id,
+                )
+        data.append({
+            "user": {"id": user.id, "name": user.name},
+            "reminders": reminders,
+        })
+    return {"success": True, "data": data, "error": None}
 
 
 @router.post("/{app_id}/events", summary="添加投递事件")

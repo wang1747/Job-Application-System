@@ -11,6 +11,11 @@ const MatchAnalysis: FC = () => {
   const [jdId, setJdId] = useState("");
   const [result, setResult] = useState<MatchResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [batchText, setBatchText] = useState("");
+  const [batchResults, setBatchResults] = useState<
+    Array<{ index: number; success: boolean; error?: string | null; match?: MatchResult | null }>
+  >([]);
+  const [batchRunning, setBatchRunning] = useState(false);
   const [error, setError] = useState("");
 
   const loadAll = useCallback(async () => {
@@ -55,6 +60,37 @@ const MatchAnalysis: FC = () => {
       setError(err instanceof Error ? err.message : "匹配失败");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleBatch = async () => {
+    setError("");
+    setBatchResults([]);
+    if (!resumeId) {
+      setError("请先选择简历");
+      return;
+    }
+    const texts = batchText
+      .split(/\n\s*\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (texts.length === 0) {
+      setError("请输入至少一条 JD");
+      return;
+    }
+    setBatchRunning(true);
+    try {
+      const res = await api.match.batch(resumeId, texts);
+      if (res.success && res.data) {
+        setBatchResults(res.data.results);
+        await loadAll();
+      } else {
+        setError(res.error || "批量匹配失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "批量匹配失败");
+    } finally {
+      setBatchRunning(false);
     }
   };
 
@@ -141,6 +177,47 @@ const MatchAnalysis: FC = () => {
           )}
         </section>
       </div>
+
+      <section className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm mt-6">
+        <h2 className="text-lg font-semibold mb-3">批量匹配 JD</h2>
+        <textarea
+          value={batchText}
+          onChange={(e) => setBatchText(e.target.value)}
+          className="w-full h-40 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="粘贴多条 JD，JD 之间用空行分隔..."
+        />
+        <button
+          onClick={handleBatch}
+          disabled={batchRunning || !resumeId}
+          className="mt-3 px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition"
+        >
+          {batchRunning ? "批量匹配中..." : "批量匹配"}
+        </button>
+
+        {batchResults.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {batchResults.map((item) => (
+              <div
+                key={item.index}
+                className={`p-3 rounded-lg border ${
+                  item.success
+                    ? "bg-green-50 border-green-200"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <div className="text-sm font-medium text-gray-700 mb-1">
+                  JD {item.index}
+                </div>
+                {item.success && item.match ? (
+                  <MatchCard result={item.match} />
+                ) : (
+                  <div className="text-sm text-red-600">{item.error || "匹配失败"}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm mt-6">
         <h2 className="text-lg font-semibold mb-4">历史排名</h2>

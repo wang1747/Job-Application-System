@@ -1,9 +1,13 @@
+import asyncio
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api.routes.model_config import router as model_config_router
 from app.core.exceptions import register_exception_handlers
 from app.core.security import hash_password
+from app.services.reminder_push_service import push_reminders_for_user
 
 from .config import get_settings
 from .core.database import init_db, SessionLocal
@@ -41,7 +45,32 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    reminder_task = None
+    if settings.reminder_webhook_url:
+        async def reminder_loop():
+            while True:
+                await asyncio.sleep(settings.reminder_check_interval_minutes * 60)
+                reminder_db = SessionLocal()
+                try:
+                    users = reminder_db.query(User).all()
+                    for user in users:
+                        try:
+                            await push_reminders_for_user(
+                                webhook_url=settings.reminder_webhook_url,
+                                db=reminder_db,
+                                user=user,
+                            )
+                        except Exception as e:
+                            logging.getLogger(__name__).error("提醒推送失败: %s", e)
+                finally:
+                    reminder_db.close()
+
+        reminder_task = asyncio.create_task(reminder_loop())
+
     yield
+
+    if reminder_task:
+        reminder_task.cancel()
 
 
 app = FastAPI(

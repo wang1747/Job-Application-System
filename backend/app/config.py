@@ -60,6 +60,20 @@ class Settings(BaseSettings):
         description="加密密钥（用于 API Key 加密存储），生产环境必须配置 32 位以上字符串"
     )
 
+    # ===== 提醒推送 =====
+    reminder_webhook_url: Optional[str] = Field(
+        default=None,
+        description="提醒推送 Webhook 地址，例如企业微信/钉钉/n8n"
+    )
+    reminder_check_interval_minutes: int = Field(
+        default=60,
+        description="提醒检查间隔（分钟）"
+    )
+    reminder_service_token: str = Field(
+        default="change-this-reminder-token",
+        description="n8n 调用提醒导出接口时的服务令牌"
+    )
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",

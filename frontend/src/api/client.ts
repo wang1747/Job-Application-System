@@ -79,6 +79,33 @@ async function requestForm<T>(path: string, formData: FormData): Promise<ApiResp
   return parseResponse<T>(res);
 }
 
+export async function downloadResumeExport(
+  resumeId: string,
+  format: "pdf" | "word",
+): Promise<Blob> {
+  const headers: HeadersInit = {};
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetchResponse(
+    `${BASE_URL}/api/v1/resume/${resumeId}/export?format=${format}`,
+    { headers },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = JSON.parse(text) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // keep HTTP fallback
+    }
+    throw new Error(detail);
+  }
+  return res.blob();
+}
+
 export async function loginRequest(
   username: string,
   password: string,
@@ -118,12 +145,22 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ raw_text: rawText }),
       }),
+    ocr: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return requestForm<{
+        id: string;
+        parsed: JDParseResult;
+        ocr_text: string;
+      }>("/api/v1/jd/ocr", formData);
+    },
     list: () => request<JDItem[]>("/api/v1/jd/list"),
     delete: (id: string) =>
       request<null>(`/api/v1/jd/${id}`, { method: "DELETE" }),
   },
 
   resume: {
+    export: downloadResumeExport,
     list: () => request<ResumeItem[]>("/api/v1/resume/list"),
     upload: (rawText: string, sourceFile?: string) =>
       request<{ id: string; version: number }>("/api/v1/resume/upload", {
@@ -152,6 +189,18 @@ export const api = {
       request<MatchResult>("/api/v1/match", {
         method: "POST",
         body: JSON.stringify({ jd_id: jdId, resume_id: resumeId }),
+      }),
+    batch: (resumeId: string, jdTexts: string[]) =>
+      request<{
+        results: Array<{
+          index: number;
+          success: boolean;
+          error?: string | null;
+          match?: MatchResult | null;
+        }>;
+      }>("/api/v1/match/batch", {
+        method: "POST",
+        body: JSON.stringify({ resume_id: resumeId, jd_texts: jdTexts }),
       }),
     rankings: () => request<MatchResult[]>("/api/v1/match/rankings"),
     detail: (matchId: string) =>
@@ -187,6 +236,19 @@ export const api = {
         filename: string;
         question_count: number;
       }>("/api/v1/interview/articles/upload", formData);
+    },
+    ocrArticle: (company: string, file: File, position?: string) => {
+      const formData = new FormData();
+      formData.append("company", company);
+      formData.append("file", file);
+      if (position) formData.append("position", position);
+      return requestForm<{
+        id: string;
+        duplicate: boolean;
+        filename: string;
+        question_count: number;
+        ocr_text: string;
+      }>("/api/v1/interview/articles/ocr", formData);
     },
     questions: () =>
       request<{ items: InterviewQuestion[]; total: number }>(

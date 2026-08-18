@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -11,6 +11,7 @@ from app.agents.tools.ats_checker import check_ats_compatibility
 from app.models.resume import Resume
 from app.api.routes.auth import get_current_user_required
 from app.models.user import User
+from app.services.export_service import export_to_pdf, export_to_word
 
 router = APIRouter()
 
@@ -162,3 +163,37 @@ async def optimize_resume_endpoint(
         },
         "error": None
     }
+
+
+@router.get("/{resume_id}/export")
+async def export_resume(
+    resume_id: str,
+    format: str = "pdf",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """导出简历（PDF 或 Word）"""
+    resume = db.query(Resume).filter(
+        Resume.id == resume_id,
+        Resume.user_id == current_user.id
+    ).first()
+    
+    if not resume:
+        raise HTTPException(status_code=404, detail="简历不存在")
+    
+    if format.lower() == "pdf":
+        content = export_to_pdf(resume)
+        media_type = "application/pdf"
+        filename = f"resume_{resume_id}.pdf"
+    elif format.lower() == "word" or format.lower() == "docx":
+        content = export_to_word(resume)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = f"resume_{resume_id}.docx"
+    else:
+        raise HTTPException(status_code=400, detail="不支持的格式，请使用 pdf 或 word")
+    
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
