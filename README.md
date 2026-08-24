@@ -16,6 +16,7 @@ OfferFlow 面向秋招、社招和日常求职场景，帮助用户从“看到�
 ## 核心功能
 
 - 注册、登录、JWT 鉴权、用户数据隔离。
+- 管理员用户管理：角色分配、启用/禁用账号。
 - 模型设置：支持 DeepSeek、OpenAI、Moonshot 等模型，用户可配置自己的 API Key。
 - JD 智能解析：提取公司、职位、硬性要求、技术栈、隐藏信号。
 - JD 与面经截图 OCR：支持 PNG / JPG / JPEG / BMP / WEBP 图片文字识别。
@@ -57,6 +58,22 @@ graph TB
     MATCH --> CHROMA[ChromaDB]
     TRACK --> DB[(SQLite)]
     TRACK --> WEBHOOK[Webhook / n8n]
+```
+
+后端已开始按模块化架构组织：
+
+```text
+backend/app/modules/
+├── auth/              # 登录注册
+├── jd/                # JD 解析与 OCR
+├── resume/            # 简历优化与导出
+├── match/             # 匹配分析
+├── interview/         # 面试准备
+├── application/       # 投递追踪
+├── model_config/      # BYOK 模型设置
+├── permissions/       # 角色与资源权限
+├── database/          # 数据库统一入口
+└── vector_store/      # 向量库统一入口
 ```
 
 ## 快速开始（本地开发）
@@ -117,6 +134,18 @@ docker compose up --build -d
 ```text
 前端：http://localhost
 n8n：http://localhost:5678
+```
+
+如需启用 PostgreSQL：
+
+```bash
+docker compose --profile postgres up -d
+```
+
+并将后端 `DATABASE_URL` 改为：
+
+```env
+DATABASE_URL=postgresql+psycopg://offerflow:offerflow@postgres:5432/offerflow
 ```
 
 生产环境建议修改：
@@ -200,6 +229,12 @@ uv run python -m pytest backend/tests -q
 cd frontend
 npm run lint
 npm run build
+```
+
+数据库备份：
+
+```bash
+python scripts/backup_db.py
 ```
 
 ## API 概览

@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import type { JDItem } from "../types";
+import type { JDItem, JDParseResult } from "../types";
+import { Card, PageHeader, SectionTitle, Badge, EmptyState, Loading, Icons } from "../components/ui";
 
-interface ParsedResult {
-  company?: string;
-  position?: string;
-  must_have: string[];
-  nice_to_have: string[];
-  tech_stack: Record<string, string[]>;
-  hidden_signals: string[];
-}
-
-// 时间格式化工具
 const formatTime = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
@@ -21,7 +12,7 @@ export default function JDAnalysis() {
   const [rawText, setRawText] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ParsedResult | null>(null);
+  const [result, setResult] = useState<JDParseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<JDItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -31,9 +22,7 @@ export default function JDAnalysis() {
     setHistoryLoading(true);
     try {
       const resp = await api.jd.list();
-      if (resp.success && resp.data) {
-        setHistory(resp.data);
-      }
+      if (resp.success && resp.data) setHistory(resp.data);
     } catch (err) {
       console.error("加载历史列表失败:", err);
     } finally {
@@ -41,42 +30,23 @@ export default function JDAnalysis() {
     }
   }, []);
 
-  useEffect(() => {
-    const initialLoad = async () => {
-      await loadHistory();
-    };
-    initialLoad();
-  }, [loadHistory]);
-
-  useEffect(() => {
-    return () => {
-      if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
-    };
-  }, []);
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
+  useEffect(() => () => { if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current); }, []);
 
   const showError = (msg: string) => {
     setError(msg);
     if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
-    const timer = setTimeout(() => setError(null), 5000);
-    autoCloseTimer.current = timer;
+    autoCloseTimer.current = setTimeout(() => setError(null), 5000);
   };
 
   const handleParse = async () => {
     const trimmed = rawText.trim();
-    if (!trimmed) {
-      showError("请输入 JD 文本");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setResult(null);
-
+    if (!trimmed) { showError("请输入 JD 文本"); return; }
+    setLoading(true); setError(null); setResult(null);
     try {
       const response = await api.jd.parse(trimmed);
       if (response.success && response.data?.parsed) {
         const parsed = response.data.parsed;
-        // 检查是否为空对象
         if (Object.keys(parsed).length === 0) {
           showError("解析结果为空，请检查 JD 文本内容");
           setResult(null);
@@ -97,13 +67,8 @@ export default function JDAnalysis() {
   };
 
   const handleOcr = async () => {
-    if (!imageFile) {
-      showError("请选择截图图片");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setResult(null);
+    if (!imageFile) { showError("请选择截图图片"); return; }
+    setLoading(true); setError(null); setResult(null);
     try {
       const response = await api.jd.ocr(imageFile);
       if (response.success && response.data) {
@@ -138,24 +103,16 @@ export default function JDAnalysis() {
     setError(null);
   };
 
-  const closeResult = () => {
-    setResult(null);
-  };
-
-  // 渲染技术栈
-  const renderTechStack = (techStack: Record<string, string[]>) => {
-    if (!techStack || Object.keys(techStack).length === 0) {
-      return <span className="text-gray-400">无</span>;
-    }
+  const renderTechStack = (techStack: JDParseResult["tech_stack"]) => {
+    if (!techStack || Object.keys(techStack).length === 0)
+      return <span className="text-sm text-slate-400">无</span>;
     return (
       <div className="flex flex-wrap gap-2">
-        {Object.entries(techStack).map(([key, values]) => (
-          values && values.length > 0 && (
-            <span key={key} className="bg-gray-100 px-2 py-1 rounded text-xs">
-              <span className="font-medium">{key}:</span> {values.join(", ")}
-            </span>
-          )
-        ))}
+        {Object.entries(techStack).map(([key, values]) =>
+          values && values.length > 0 ? (
+            <Badge key={key} color="indigo">{key}: {values.join(", ")}</Badge>
+          ) : null
+        )}
       </div>
     );
   };
@@ -163,133 +120,124 @@ export default function JDAnalysis() {
   const hasResultData = result && Object.keys(result).length > 0;
 
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6">
-      <h1 className="text-2xl font-bold mb-6">JD 智能解析</h1>
+    <div>
+      <PageHeader
+        title="JD 智能解析"
+        subtitle="粘贴职位描述，AI 自动提取硬性要求、加分项、技术栈和隐藏信号"
+        icon={Icons.sparkle}
+      />
 
-      {/* 输入区 */}
-      <div className="mb-4">
+      {error && <div className="of-alert-error mb-4">{Icons.alert}<span>{error}</span></div>}
+
+      <Card className="mb-5 p-5">
+        <SectionTitle>输入 JD 文本</SectionTitle>
         <textarea
-          className="w-full h-48 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          className="of-textarea h-48"
           placeholder="粘贴职位描述 (JD) 文本..."
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
           disabled={loading}
           aria-label="JD 文本输入"
         />
-      </div>
-
-      <button
-        onClick={handleParse}
-        disabled={loading || !rawText.trim()}
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-        aria-label="开始解析 JD"
-      >
-        {loading ? "解析中..." : "开始解析"}
-      </button>
-
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <input
-          type="file"
-          accept=".png,.jpg,.jpeg,.bmp,.webp"
-          onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-          className="text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-blue-600 file:text-white"
-        />
-        <button
-          onClick={handleOcr}
-          disabled={loading || !imageFile}
-          className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:bg-gray-400 transition"
-        >
-          OCR 识别导入
-        </button>
-      </div>
-
-      {/* 错误提示 */}
-      {error && (
-        <div className="mt-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex justify-between items-center">
-          <span>⚠️ {error}</span>
-          <button
-            className="text-sm underline"
-            onClick={() => setError(null)}
-            aria-label="关闭错误提示"
-          >
-            关闭
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button onClick={handleParse} disabled={loading || !rawText.trim()} className="of-btn-primary">
+            {loading ? (
+              <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />解析中...</>
+            ) : <>开始解析</>}
+          </button>
+          <input
+            type="file"
+            accept=".png,.jpg,.jpeg,.bmp,.webp"
+            onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+            className="block text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-brand-600"
+          />
+          <button onClick={handleOcr} disabled={loading || !imageFile} className="of-btn-outline">
+            OCR 识别导入
           </button>
         </div>
-      )}
+      </Card>
 
-      {/* 解析结果 */}
       {hasResultData && (
-        <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-xl font-semibold text-green-800">✅ 解析结果</h2>
-            <button
-              onClick={closeResult}
-              className="text-gray-400 hover:text-gray-600 text-sm"
-              aria-label="关闭结果"
-            >
-              ✕ 关闭
-            </button>
+        <Card className="mb-5 border-emerald-200 bg-emerald-50/50 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-emerald-700">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M13 4L6 11l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              解析结果
+            </h2>
+            <button onClick={() => setResult(null)} className="text-sm text-slate-400 hover:text-slate-600">关闭</button>
           </div>
           <div className="space-y-3 text-sm">
-            <div><span className="font-medium">公司：</span>{result.company || "-"}</div>
-            <div><span className="font-medium">职位：</span>{result.position || "-"}</div>
-            <div>
-              <span className="font-medium">硬性要求：</span>
-              <ul className="list-disc list-inside ml-4">
-                {result.must_have?.length ? result.must_have.map((item, idx) => <li key={idx}>{item}</li>) : <li>无</li>}
-              </ul>
+            <div className="flex gap-2">
+              <span className="w-20 flex-shrink-0 font-medium text-slate-500">公司</span>
+              <span className="text-slate-900">{result.company || "-"}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="w-20 flex-shrink-0 font-medium text-slate-500">职位</span>
+              <span className="text-slate-900">{result.position || "-"}</span>
             </div>
             <div>
-              <span className="font-medium">加分项：</span>
-              <ul className="list-disc list-inside ml-4">
-                {result.nice_to_have?.length ? result.nice_to_have.map((item, idx) => <li key={idx}>{item}</li>) : <li>无</li>}
-              </ul>
+              <span className="font-medium text-slate-500">硬性要求</span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {result.must_have?.length ? result.must_have.map((item, i) => (
+                  <Badge key={i} color="red">{item}</Badge>
+                )) : <span className="text-slate-400">无</span>}
+              </div>
             </div>
             <div>
-              <span className="font-medium">技术栈：</span>
-              {renderTechStack(result.tech_stack)}
+              <span className="font-medium text-slate-500">加分项</span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {result.nice_to_have?.length ? result.nice_to_have.map((item, i) => (
+                  <Badge key={i} color="amber">{item}</Badge>
+                )) : <span className="text-slate-400">无</span>}
+              </div>
+            </div>
+            <div>
+              <span className="font-medium text-slate-500">技术栈</span>
+              <div className="mt-1.5">{renderTechStack(result.tech_stack)}</div>
             </div>
             {result.hidden_signals?.length > 0 && (
               <div>
-                <span className="font-medium">隐藏信号：</span>
-                <ul className="list-disc list-inside ml-4">
-                  {result.hidden_signals.map((item, idx) => <li key={idx}>{item}</li>)}
-                </ul>
+                <span className="font-medium text-slate-500">隐藏信号</span>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {result.hidden_signals.map((item, i) => (
+                    <Badge key={i} color="indigo">{item}</Badge>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* 历史列表 */}
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold mb-3">📋 历史记录</h2>
+      <div>
+        <SectionTitle count={history.length}>历史记录</SectionTitle>
         {historyLoading ? (
-          <div className="text-gray-500 text-sm">加载中...</div>
+          <Loading text="加载中..." />
         ) : history.length === 0 ? (
-          <div className="text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg p-6 text-center">
-            暂无 JD 记录，快来解析第一条吧！
-          </div>
+          <EmptyState title="暂无 JD 记录" description="快来解析第一条吧" />
         ) : (
           <div className="space-y-2">
             {history.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition cursor-pointer border border-transparent"
+                className="of-card-hover flex items-center justify-between p-4 cursor-pointer"
                 onClick={() => handleSelectHistory(item)}
               >
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium">{item.company || "未知公司"}</span>
-                  <span className="text-gray-500 mx-2">·</span>
-                  <span>{item.position || "未知职位"}</span>
-                  <span className="text-gray-400 text-xs ml-3 hidden sm:inline">
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium text-slate-900">{item.company || "未知公司"}</span>
+                  <span className="mx-2 text-slate-300">·</span>
+                  <span className="text-sm text-slate-600">{item.position || "未知职位"}</span>
+                  <span className="ml-3 hidden text-xs text-slate-400 sm:inline">
                     {formatTime(item.created_at || "")}
                   </span>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-                  className="text-red-500 hover:text-red-700 text-sm px-2 flex-shrink-0"
-                  aria-label={`删除 ${item.company || "未知"} 的 JD`}
+                  className="of-btn-danger px-2.5 py-1 text-xs"
                 >
                   删除
                 </button>

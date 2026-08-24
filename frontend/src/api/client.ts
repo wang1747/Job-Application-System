@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  AdminUser,
   Application,
   ApplicationStats,
   GeneratedQuestion,
@@ -27,6 +28,13 @@ const getToken = (): string | null => {
   return localStorage.getItem("access_token");
 };
 
+function handleUnauthorized() {
+  localStorage.removeItem("access_token");
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
 async function fetchResponse(input: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(input, init);
@@ -44,6 +52,9 @@ async function parseResponse<T>(res: Response): Promise<ApiResponse<T>> {
     throw new Error(`HTTP ${res.status}: 响应不是有效 JSON`);
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
     const detail = (body as { detail?: string }).detail || `HTTP ${res.status}`;
     throw new Error(detail);
   }
@@ -136,6 +147,20 @@ export const api = {
     logout: () =>
       request<{ message: string }>("/api/v1/auth/logout", {
         method: "POST",
+      }),
+  },
+
+  admin: {
+    listUsers: () => request<AdminUser[]>("/api/v1/admin/users"),
+    updateRole: (id: string, role: "admin" | "user") =>
+      request<AdminUser>(`/api/v1/admin/users/${id}/role`, {
+        method: "PUT",
+        body: JSON.stringify({ role }),
+      }),
+    updateActive: (id: string, is_active: boolean) =>
+      request<AdminUser>(`/api/v1/admin/users/${id}/active`, {
+        method: "PUT",
+        body: JSON.stringify({ is_active }),
       }),
   },
 

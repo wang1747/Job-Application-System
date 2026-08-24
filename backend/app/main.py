@@ -4,15 +4,21 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.api.routes.model_config import router as model_config_router
 from app.core.exceptions import register_exception_handlers
 from app.core.security import hash_password
-from app.services.reminder_push_service import push_reminders_for_user
+from app.modules.application.reminder_push_service import push_reminders_for_user
+from app.modules.application import router as application_router
+from app.modules.admin import router as admin_router
+from app.modules.auth import router as auth_router
+from app.modules.interview import router as interview_router
+from app.modules.jd import router as jd_router
+from app.modules.match import router as match_router
+from app.modules.model_config import router as model_config_router
+from app.modules.resume import router as resume_router
 
 from .config import get_settings
 from .core.database import init_db, SessionLocal
 from .models.user import User
-from .api.routes import application, auth, interview, jd, match, resume
 
 
 @asynccontextmanager
@@ -89,13 +95,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(jd.router, prefix="/api/v1/jd", tags=["JD解析模块"])
-app.include_router(resume.router, prefix="/api/v1/resume", tags=["简历模块"])
-app.include_router(match.router)
-app.include_router(interview.router)
-app.include_router(application.router)
-app.include_router(auth.router)
+app.include_router(jd_router, prefix="/api/v1/jd", tags=["JD解析模块"])
+app.include_router(resume_router, prefix="/api/v1/resume", tags=["简历模块"])
+app.include_router(match_router)
+app.include_router(interview_router)
+app.include_router(application_router)
+app.include_router(auth_router)
 app.include_router(model_config_router)
+app.include_router(admin_router)
 
 register_exception_handlers(app)
 

@@ -1,86 +1,123 @@
-import { type FC } from "react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import { Icons } from "./ui";
 
-interface SidebarProps {
-  active: string;
-  onNavigate: (page: string) => void;
-}
-
-const navItems = [
-  { key: "dashboard", label: "总览", icon: "总", path: "/" },
-  { key: "jd", label: "JD 解析", icon: "JD", path: "/jd" },
-  { key: "match", label: "匹配分析", icon: "匹", path: "/match" },
-  { key: "resume", label: "简历优化", icon: "简", path: "/resume" },
-  { key: "interview", label: "面试准备", icon: "面", path: "/interview" },
-  { key: "applications", label: "投递追踪", icon: "投", path: "/applications" },
-  { key: "settings", label: "模型设置", icon: "设", path: "/settings" },
+const NAV_ITEMS = [
+  { to: "/", label: "总览", icon: Icons.dashboard, end: true },
+  { to: "/jd", label: "JD 解析", icon: Icons.sparkle },
+  { to: "/resume", label: "简历优化", icon: Icons.resume },
+  { to: "/match", label: "匹配分析", icon: Icons.match },
+  { to: "/interview", label: "面试准备", icon: Icons.interview },
+  { to: "/applications", label: "投递追踪", icon: Icons.track },
 ];
 
-const Sidebar: FC<SidebarProps> = ({ active, onNavigate }) => {
-  const navigate = useNavigate();
-  const { logout } = useAuthStore();
+const SECONDARY_ITEMS = [
+  { to: "/settings", label: "模型设置", icon: Icons.settings },
+];
 
-  const handleNavigate = (key: string, path: string) => {
-    onNavigate(key);
-    navigate(path);
-  };
+export default function Sidebar() {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
+  const isAdmin = user?.role === "admin";
+
   return (
-    <aside className="sticky top-0 flex h-screen w-64 flex-col bg-slate-950 text-slate-200 shadow-2xl">
-      <div className="flex h-20 items-center border-b border-white/10 px-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500 text-sm font-black text-white shadow-lg shadow-indigo-500/25">
+    <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-gradient-to-b from-slate-900 via-slate-900 to-brand-950">
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-6 py-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-black text-white shadow-lg shadow-brand-600/30">
           OF
         </div>
-        <div className="ml-3">
-          <div className="text-lg font-bold tracking-tight text-white">OfferFlow</div>
-          <div className="text-xs text-slate-400">求职智能助手</div>
+        <div>
+          <p className="text-sm font-bold text-white">OfferFlow</p>
+          <p className="text-[10px] font-medium text-slate-400">求职智能助手</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        {navItems.map((item) => {
-          const isActive = active === item.key;
-          return (
-            <button
-              key={item.key}
-              onClick={() => handleNavigate(item.key, item.path)}
-              className={`group flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left transition ${
+      {/* Nav */}
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+        <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          工作区
+        </p>
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) =>
+              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                 isActive
-                  ? "bg-white/10 text-white shadow-inner"
-                  : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
-              }`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition ${
-                  isActive
-                    ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                    : "bg-white/5 text-slate-400 group-hover:text-white"
-                }`}
-              >
-                {item.icon}
-              </span>
-              <span className="text-sm font-medium">{item.label}</span>
-            </button>
-          );
-        })}
+                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
+              }`
+            }
+          >
+            <span className="flex h-5 w-5 items-center justify-center">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+
+        <p className="px-3 pt-5 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          系统
+        </p>
+        {SECONDARY_ITEMS.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                isActive
+                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
+              }`
+            }
+          >
+            <span className="flex h-5 w-5 items-center justify-center">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+
+        {isAdmin && (
+          <NavLink
+            to="/admin/users"
+            className={({ isActive }) =>
+              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                isActive
+                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white"
+              }`
+            }
+          >
+            <span className="flex h-5 w-5 items-center justify-center">{Icons.admin}</span>
+            用户管理
+          </NavLink>
+        )}
       </nav>
 
-      <div className="border-t border-white/10 p-3">
-        <button
-          onClick={handleLogout}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 text-sm font-medium text-rose-300 transition hover:border-rose-400/30 hover:bg-rose-500/10"
-        >
-          退出登录
-        </button>
+      {/* User */}
+      <div className="border-t border-white/5 px-4 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">
+            {user?.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-white">{user?.name}</p>
+            <p className="text-[10px] text-slate-400">{isAdmin ? "管理员" : "成员"}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/5 hover:text-rose-400"
+            title="退出登录"
+          >
+            {Icons.logout}
+          </button>
+        </div>
       </div>
     </aside>
   );
-};
-
-export default Sidebar;
+}

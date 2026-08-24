@@ -52,6 +52,21 @@ services:
       - ./n8n/workflows:/home/node/workflows
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    container_name: offerflow-postgres
+    environment:
+      POSTGRES_DB: offerflow
+      POSTGRES_USER: offerflow
+      POSTGRES_PASSWORD: offerflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
 volumes:
   n8n-data:
+  postgres-data:
 

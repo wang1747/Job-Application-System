@@ -1,0 +1,117 @@
+# ============================================================
+#  OfferFlow 生产环境编排  (docker compose -f docker-compose.prod.yml up -d)
+#  与开发版区别：启用 Postgres / 去掉 n8n / 安全加固 / 日志限制
+# ============================================================
+
+services:
+  # -------------------- 数据库 --------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: offerflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-offferflow}
+      POSTGRES_USER: ${POSTGRES_USER:-offferflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-offferflow} -d ${POSTGRES_DB:-offferflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # 生产环境不暴露 5432 到公网，仅容器间可见
+    # 如需本地调试可临时打开下行：
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+  # -------------------- 后端 --------------------
+  backend:
+    build: .
+    container_name: offerflow-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - APP_ENV=production
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      # 切 Postgres：注意 driver 用 psycopg（v3），不是 psycopg2
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-offferflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-offferflow}
+      - CHROMA_PERSIST_PATH=/app/chroma_db
+      - DEFAULT_USER_ID=${DEFAULT_USER_ID:-default}
+      - DEFAULT_USER_NAME=${DEFAULT_USER_NAME:-demo}
+      - DEFAULT_USER_PASSWORD=${DEFAULT_USER_PASSWORD:?Change default password}
+      - CORS_ORIGINS=${CORS_ORIGINS:?Set your domain, e.g. https://offferflow.example.com}
+      - UVICORN_RELOAD=false
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be 32+ random chars}
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY must be 32+ random chars}
+      - REMINDER_WEBHOOK_URL=${REMINDER_WEBHOOK_URL:-}
+      - REMINDER_CHECK_INTERVAL_MINUTES=${REMINDER_CHECK_INTERVAL_MINUTES:-60}
+      - REMINDER_SERVICE_TOKEN=${REMINDER_SERVICE_TOKEN:?Change reminder token}
+    volumes:
+      - chroma-data:/app/chroma_db
+      - upload-data:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # -------------------- 前端 (nginx 反代) --------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: offerflow-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+      # 如需 HTTPS，加 443 并挂载证书（见 deploy/nginx.prod.conf）
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      # 自签 / Let's Encrypt 证书挂载点（可选）
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - ./deploy/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # -------------------- 备份（定时 pg_dump，可选）--------------------
+  db-backup:
+    image: prodrigestivellc/postgres-backup:16
+    container_name: offerflow-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-offferflow}
+      - POSTGRES_USER=${POSTGRES_USER:-offferflow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+    volumes:
+      - backup-data:/backups
+
+volumes:
+  postgres-data:
+  chroma-data:
+  upload-data:
+  backup-data:

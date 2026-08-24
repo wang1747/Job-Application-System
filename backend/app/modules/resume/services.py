@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.resume import Resume
-from app.services.match_service import _extract_skills
+from app.modules.match.services import _extract_skills
 
 
 def _summarize_resume(raw_text: str) -> dict:

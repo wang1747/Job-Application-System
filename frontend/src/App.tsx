@@ -12,18 +12,20 @@ import InterviewPrep from "./pages/InterviewPrep";
 import ApplicationTracker from "./pages/ApplicationTracker";
 import ModelSettings from "./pages/ModelSettings";
 import ModelConfigGate from "./components/ModelConfigGate";
+import UserManagement from "./pages/admin/UserManagement";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, initialize } = useAuthStore();
+  const { isAuthenticated, initialized } = useAuthStore();
+  if (!initialized) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user, initialized } = useAuthStore();
+  if (!initialized) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -113,6 +115,16 @@ function App() {
                 <ModelSettings />
               </Layout>
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminRoute>
+              <Layout>
+                <UserManagement />
+              </Layout>
+            </AdminRoute>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

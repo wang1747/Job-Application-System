@@ -5,21 +5,20 @@
 :root {
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: #0f172a;
-  background: #f4f6fb;
+  background: #f8fafc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   min-width: 320px;
   margin: 0;
-  background: #f4f6fb;
+  background: #f8fafc;
 }
 
-button,
-input,
-textarea,
-select {
+button, input, textarea, select {
   font: inherit;
 }
 
@@ -29,23 +28,76 @@ select {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
 }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-  border: 2px solid transparent;
-  background-clip: content-box;
+@layer components {
+  /* ---- Card ---- */
+  .of-card {
+    @apply rounded-2xl border border-slate-200/70 bg-white shadow-card;
+  }
+  .of-card-hover {
+    @apply rounded-2xl border border-slate-200/70 bg-white shadow-card transition-all duration-200 hover:shadow-hover hover:border-brand-200;
+  }
+
+  /* ---- Button ---- */
+  .of-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .of-btn-primary {
+    @apply of-btn bg-brand-600 text-white shadow-soft hover:bg-brand-700 active:scale-[0.98];
+  }
+  .of-btn-ghost {
+    @apply of-btn bg-transparent text-slate-600 hover:bg-slate-100;
+  }
+  .of-btn-outline {
+    @apply of-btn border border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:text-brand-600;
+  }
+  .of-btn-danger {
+    @apply of-btn bg-rose-50 text-rose-600 hover:bg-rose-100;
+  }
+
+  /* ---- Input ---- */
+  .of-input {
+    @apply h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-50;
+  }
+  .of-select {
+    @apply of-input cursor-pointer pr-8;
+  }
+  .of-textarea {
+    @apply w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-50;
+  }
+
+  /* ---- Badge / Tag ---- */
+  .of-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* ---- Alert ---- */
+  .of-alert-error {
+    @apply mb-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700;
+  }
+  .of-alert-success {
+    @apply mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700;
+  }
+
+  /* ---- Page header ---- */
+  .of-page-title {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+  .of-section-title {
+    @apply text-base font-semibold text-slate-900;
+  }
+
+  /* ---- Empty state ---- */
+  .of-empty {
+    @apply flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-6 py-12 text-center;
+  }
 }

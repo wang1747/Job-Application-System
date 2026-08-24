@@ -6,9 +6,11 @@ from ..config import get_settings
 settings = get_settings()
 
 # 创建数据库引擎
+connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False}  # SQLite 专用参数
+    connect_args=connect_args,
+    pool_pre_ping=True,
 )
 
 # 创建会话工厂
@@ -41,8 +43,14 @@ def init_db():
             "llm_base_url",
             "llm_model",
             "encrypted_api_key",
+            "role",
+            "is_active",
         ):
             if column in columns:
                 continue
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {column} VARCHAR"))
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))

@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { Icons } from "./ui";
 
 type GateState = "loading" | "missing" | "ready";
 
@@ -26,27 +27,28 @@ export default function ModelConfigGate({ children }: { children: ReactNode }) {
 
   if (state === "loading") {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        检查模型配置中...
+      <div className="flex items-center justify-center py-20">
+        <div className="flex items-center gap-3 text-slate-400">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-brand-500" />
+          <span className="text-sm">检查模型配置...</span>
+        </div>
       </div>
     );
   }
 
   if (state === "missing") {
     return (
-      <div className="max-w-2xl mx-auto p-8">
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-          <h2 className="text-lg font-semibold text-amber-800 mb-2">
-            请先完成模型设置
-          </h2>
-          <p className="text-sm text-amber-700 mb-4">
-            该功能依赖 LLM，需要先配置你自己的 API Key。
+      <div className="mx-auto max-w-lg py-12">
+        <div className="of-card p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+            {Icons.alert}
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">请先完成模型设置</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            该功能依赖 LLM，需要先配置你自己的 API Key（BYOK 架构，密钥加密存储）。
           </p>
-          <Link
-            to="/settings"
-            className="inline-block px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-          >
-            去模型设置
+          <Link to="/settings" className="of-btn-primary mt-6 inline-flex">
+            前往设置
           </Link>
         </div>
       </div>

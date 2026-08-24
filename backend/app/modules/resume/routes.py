@@ -4,14 +4,14 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
-from app.services.resume_service import list_resumes, upload_resume, get_resume_versions, save_optimized_version
+from app.modules.resume.services import list_resumes, upload_resume, get_resume_versions, save_optimized_version
 from app.agents.tools.resume_parser import parse_resume_bytes
 from app.agents.graphs.resume_optimize import optimize_resume
 from app.agents.tools.ats_checker import check_ats_compatibility
 from app.models.resume import Resume
-from app.api.routes.auth import get_current_user_required
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
-from app.services.export_service import export_to_pdf, export_to_word
+from app.modules.resume.export_service import export_to_pdf, export_to_word
 
 router = APIRouter()
 
@@ -55,6 +55,8 @@ async def upload_resume_file(
 ):
     """上传简历文件（PDF/MD/TXT）"""
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
     
     try:
         raw_text = parse_resume_bytes(file.filename, content)

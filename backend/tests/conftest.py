@@ -63,7 +63,7 @@ def _fake_llm(monkeypatch):
     import app.agents.graphs.jd_analysis as jd_analysis
     import app.agents.graphs.mock_interview as mock_interview
     import app.agents.graphs.resume_optimize as resume_optimize
-    import app.services.interview_service as interview_service
+    import app.modules.interview.services as interview_service
 
     monkeypatch.setattr(jd_analysis, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(resume_optimize, "get_user_llm_or_raise", lambda user: fake)
@@ -123,7 +123,7 @@ def auth_client(tmp_path):
 
 @pytest.fixture
 def client(auth_client):
-    from app.api.routes.auth import get_current_user_required
+    from app.modules.auth.routes import get_current_user_required
 
     def override_current_user():
         return User(id="default", name="默认用户")

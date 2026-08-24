@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 
 # ===== 项目内部 =====
 from app.core.database import get_db
-from app.api.routes.auth import get_current_user_required
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
-from app.services.model_config_service import (
+from app.modules.model_config.services import (
     get_user_model_config,
     save_model_config,
     clear_model_config,

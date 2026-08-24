@@ -5,7 +5,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.services.reminder_service import get_company_interview_articles, get_reminders
+from app.modules.application.reminder_service import get_company_interview_articles, get_reminders
 
 logger = logging.getLogger(__name__)
 

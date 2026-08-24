@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
+import { Card, PageHeader, Badge, Loading } from "../components/ui";
 
 interface PresetProvider {
   key: string;
@@ -96,7 +97,7 @@ export default function ModelSettings() {
         api_key: apiKey,
       });
       if (res.success) {
-        setTestResult({ success: true, message: "连接成功！" });
+        setTestResult({ success: true, message: "连接成功！模型可用" });
       } else {
         setTestResult({ success: false, message: res.error || "连接失败" });
       }
@@ -130,7 +131,7 @@ export default function ModelSettings() {
         api_key: apiKey,
       });
       if (res.success) {
-        setSuccess("配置保存成功！");
+        setSuccess("配置保存成功！2 秒后跳转首页...");
         await loadData();
         setApiKey("");
         setTimeout(() => navigate("/"), 2000);
@@ -155,6 +156,7 @@ export default function ModelSettings() {
         setBaseUrl("");
         setModel("");
         setApiKey("");
+        setTestResult(null);
       } else {
         setError(res.error || "清除失败");
       }
@@ -164,147 +166,220 @@ export default function ModelSettings() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">加载中...</div>
-      </div>
-    );
+    return <Loading text="加载模型配置..." />;
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-2">⚙️ 模型设置</h1>
-      <p className="text-gray-500 mb-6">
-        配置 LLM 模型和 API Key，用于 JD 解析、简历优化、面试题生成等功能
-      </p>
+    <div className="mx-auto max-w-2xl p-4 sm:p-6">
+      <PageHeader
+        title="模型设置"
+        subtitle="配置 LLM 模型和 API Key，用于 JD 解析、简历优化、面试题生成等功能"
+        icon={
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        }
+      />
 
+      {/* 当前配置状态 */}
       {config?.has_config && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-700">
-            ✅ 当前已配置：{config.provider} · {config.model}
-            <br />
-            <span className="text-xs text-gray-500">API Key: {config.api_key_masked}</span>
-          </p>
-        </div>
+        <Card className="mb-4 border-emerald-200 bg-emerald-50/50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-emerald-800">当前已配置</p>
+                <Badge color="green">{config.provider}</Badge>
+                <Badge color="blue">{config.model}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                API Key: <code className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">{config.api_key_masked}</code>
+              </p>
+            </div>
+          </div>
+        </Card>
       )}
 
+      {/* BYOK 说明 */}
+      <Card className="mb-4 border-blue-100 bg-blue-50/30 p-4">
+        <div className="flex items-start gap-3">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0 text-blue-500">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+          <p className="text-xs leading-relaxed text-slate-600">
+            采用 <span className="font-semibold text-slate-800">BYOK (Bring Your Own Key)</span> 模式：你的 API Key 仅存储在服务端加密配置中，仅用于调用你指定的模型。平台不代付费用，你的使用成本完全可控。
+          </p>
+        </div>
+      </Card>
+
       {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300">
+        <div className="of-alert-error">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
           {error}
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg border border-green-300">
+        <div className="of-alert-success">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
           {success}
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            模型提供商
-          </label>
-          <select
-            value={selectedProvider}
-            onChange={(e) => handlePresetChange(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">请选择</option>
-            {presets.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.key.charAt(0).toUpperCase() + p.key.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Base URL
-          </label>
-          <input
-            type="url"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.deepseek.com"
-            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            模型名
-          </label>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="deepseek-chat"
-            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            API Key
-          </label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="请输入 API Key"
-            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          {config?.has_config && (
-            <p className="text-xs text-gray-400 mt-1">
-              当前已配置掩码：{config.api_key_masked}
-              <br />
-              输入新 Key 将覆盖旧配置
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <button
-            onClick={handleTest}
-            disabled={testing || !baseUrl || !model || !apiKey}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-300 transition"
-          >
-            {testing ? "测试中..." : "🔗 测试连接"}
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={saving || !selectedProvider || !baseUrl || !model || !apiKey}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition"
-          >
-            {saving ? "保存中..." : "💾 保存配置"}
-          </button>
-
-          {config?.has_config && (
-            <button
-              onClick={handleClear}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-            >
-              🗑️ 清除配置
-            </button>
-          )}
-        </div>
-
-        {testResult && (
-          <div
-            className={`mt-3 p-3 rounded-lg border ${
-              testResult.success
-                ? "bg-green-50 border-green-200 text-green-700"
-                : "bg-red-50 border-red-200 text-red-700"
-            }`}
-          >
-            {testResult.success ? "✅ " : "❌ "}
-            {testResult.message}
+      <Card className="p-6">
+        <div className="space-y-5">
+          {/* 提供商预设 */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              模型提供商
+              <span className="ml-1.5 text-xs font-normal text-slate-400">选择预设自动填充</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {presets.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => handlePresetChange(p.key)}
+                  className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                    selectedProvider === p.key
+                      ? "border-brand-500 bg-brand-50 text-brand-700 shadow-soft"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                >
+                  {p.key.charAt(0).toUpperCase() + p.key.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Base URL</label>
+              <input
+                type="url"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://api.deepseek.com"
+                className="of-input"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">模型名</label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="deepseek-chat"
+                className="of-input"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              API Key
+              {config?.has_config && (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  当前掩码: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">{config.api_key_masked}</code>
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="输入新的 API Key（将覆盖旧配置）"
+                className="of-input pr-10"
+              />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            {apiKey.length > 0 && apiKey.length < 8 && (
+              <p className="mt-1.5 text-xs text-rose-500">API Key 长度至少 8 位</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+            <button
+              onClick={handleTest}
+              disabled={testing || !baseUrl || !model || !apiKey}
+              className="of-btn-outline"
+            >
+              {testing ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-brand-500" />
+                  测试中...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <path d="M22 4L12 14.01l-3-3" />
+                  </svg>
+                  测试连接
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !selectedProvider || !baseUrl || !model || !apiKey}
+              className="of-btn-primary"
+            >
+              {saving ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  保存中...
+                </>
+              ) : (
+                "保存配置"
+              )}
+            </button>
+            {config?.has_config && (
+              <button onClick={handleClear} className="of-btn-danger">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                清除配置
+              </button>
+            )}
+          </div>
+
+          {testResult && (
+            <div
+              className={`flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+                testResult.success
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
+              {testResult.success ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M15 9l-6 6M9 9l6 6" />
+                </svg>
+              )}
+              {testResult.message}
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

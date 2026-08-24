@@ -15,19 +15,9 @@ export default function Register() {
     e.preventDefault();
     setError("");
     setSuccess("");
-
-    if (!username.trim() || !password.trim()) {
-      setError("请输入用户名和密码");
-      return;
-    }
-    if (password.length < 6) {
-      setError("密码至少 6 位");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("两次密码输入不一致");
-      return;
-    }
+    if (!username.trim() || !password.trim()) { setError("请输入用户名和密码"); return; }
+    if (password.length < 6) { setError("密码至少 6 位"); return; }
+    if (password !== confirmPassword) { setError("两次密码输入不一致"); return; }
 
     setLoading(true);
     try {
@@ -46,79 +36,53 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 px-4 py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
-        <div className="w-full rounded-3xl border border-white/10 bg-white p-7 shadow-soft sm:p-9">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900">
+      <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-emerald-600/20 blur-3xl" />
+      <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-emerald-500/15 blur-3xl" />
+
+      <div className="relative mx-auto flex min-h-screen max-w-md items-center px-4">
+        <div className="w-full rounded-3xl border border-white/10 bg-white/95 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-black text-white shadow-lg shadow-emerald-600/30">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-xl font-black text-white shadow-lg shadow-emerald-600/30">
               OF
             </div>
             <h1 className="text-2xl font-bold text-slate-950">注册账号</h1>
             <p className="mt-2 text-sm text-slate-500">创建你的 OfferFlow 工作台</p>
           </div>
 
-          {error && (
-            <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {success}
-            </div>
-          )}
+          {error && <div className="of-alert-error mb-5">{error}</div>}
+          {success && <div className="of-alert-success mb-5">{success}</div>}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">用户名</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="请输入用户名"
-                disabled={loading}
-              />
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                className="of-input" placeholder="请输入用户名" disabled={loading} />
             </div>
-
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">密码（至少 6 位）</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="请输入密码"
-                disabled={loading}
-              />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                className="of-input" placeholder="请输入密码" disabled={loading} />
             </div>
-
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">确认密码</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
-                placeholder="请再次输入密码"
-                disabled={loading}
-              />
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                className="of-input" placeholder="请再次输入密码" disabled={loading} />
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="h-11 w-full rounded-xl bg-emerald-600 font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-            >
-              {loading ? "注册中..." : "注册"}
+            <button type="submit" disabled={loading}
+              className="of-btn h-11 w-full bg-emerald-600 text-white shadow-soft hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50">
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  注册中...
+                </>
+              ) : "注册"}
             </button>
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             已有账号？
-            <Link to="/login" className="font-medium text-emerald-600 hover:text-emerald-700">
-              去登录
-            </Link>
+            <Link to="/login" className="font-medium text-emerald-600 hover:text-emerald-700">去登录</Link>
           </p>
         </div>
       </div>

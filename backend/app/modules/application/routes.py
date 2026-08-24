@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 # ===== 项目内部 =====
 from app.core.database import get_db
-from app.services.application_service import (
+from app.modules.application.services import (
     add_event,
     create_application,
     delete_application,
@@ -24,8 +24,8 @@ from app.services.application_service import (
     update_application,
     update_application_status,
 )
-from app.services.reminder_service import get_company_interview_articles, get_reminders
-from app.api.routes.auth import get_current_user_required
+from app.modules.application.reminder_service import get_company_interview_articles, get_reminders
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
 from app.config import get_settings
 

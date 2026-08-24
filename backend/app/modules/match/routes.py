@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 
 # ===== 项目内部 =====
 from app.core.database import get_db
-from app.services.match_service import calculate_match, get_match_detail, get_rankings
-from app.services.jd_service import parse_and_save
-from app.api.routes.auth import get_current_user_required
+from app.modules.match.services import calculate_match, get_match_detail, get_rankings
+from app.modules.jd.services import parse_and_save
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
 from app.schemas.match import MatchRequest, MatchResponse, RankingItem
 from app.schemas.common import ApiResponse

@@ -1,3 +1,5 @@
+import threading
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,6 +29,20 @@ from app.schemas.common import ApiResponse, success_response
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 bearer_scheme = HTTPBearer(auto_error=False)
+_login_attempts: dict[str, list[float]] = {}
+_login_attempts_lock = threading.Lock()
+
+
+def _check_login_rate_limit(username: str) -> None:
+    now = time.time()
+    window = 60
+    max_attempts = 5
+    with _login_attempts_lock:
+        attempts = [ts for ts in _login_attempts.get(username, []) if now - ts < window]
+        if len(attempts) >= max_attempts:
+            raise HTTPException(status_code=429, detail="登录尝试过于频繁，请稍后再试")
+        attempts.append(now)
+        _login_attempts[username] = attempts
 
 
 def get_current_user_required(
@@ -55,12 +71,12 @@ def _resolve_token_user(
     user_id = decode_access_token(credentials.credentials)
     if not user_id:
         return None
-    return db.query(User).filter(User.id == user_id).first()
+    return db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
 
 
 def _authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     user = db.query(User).filter(User.name == username).first()
-    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
+    if not user or not user.is_active or not user.hashed_password or not verify_password(password, user.hashed_password):
         return None
     return user
 
@@ -83,6 +99,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=ApiResponse[LoginResponse])
 def login(req: LoginRequest, db: Session = Depends(get_db)):
+    _check_login_rate_limit(req.username)
     user = _authenticate_user(db, req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
@@ -102,6 +119,7 @@ def login_form(
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    _check_login_rate_limit(form.username)
     user = _authenticate_user(db, form.username, form.password)
     if not user:
         raise HTTPException(status_code=401, detail="用户名或密码错误")

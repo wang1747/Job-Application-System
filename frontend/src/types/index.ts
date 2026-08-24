@@ -9,6 +9,16 @@ export interface ApiResponse<T> {
 export interface User {
   id: string;
   name: string;
+  role?: string;
+  is_active?: boolean;
+  created_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  role: string;
+  is_active: boolean;
   created_at: string;
 }
 

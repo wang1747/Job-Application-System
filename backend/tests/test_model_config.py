@@ -1,6 +1,6 @@
 from app.config import get_settings
 from app.core.encryption import decrypt_value, encrypt_value, mask_api_key
-from app.services.model_config_service import validate_base_url
+from app.modules.model_config.services import validate_base_url
 
 
 def test_encrypt_decrypt_roundtrip():

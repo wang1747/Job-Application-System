@@ -1,13 +1,13 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from fastapi import File, UploadFile
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.services.jd_service import parse_and_save, list_jds, delete_jd
-from app.api.routes.auth import get_current_user_required
+from app.modules.jd.services import parse_and_save, list_jds, delete_jd
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
-from app.services.ocr_service import extract_text_from_image_file
+from app.modules.jd.ocr_service import extract_text_from_image_file
 
 router = APIRouter()
 
@@ -45,6 +45,8 @@ async def ocr_import_jd(
     上传图片，自动识别文字内容并解析
     """
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
     
     try:
         raw_text = extract_text_from_image_file(content, file.filename)

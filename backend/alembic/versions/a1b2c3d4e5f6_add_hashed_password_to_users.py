@@ -19,6 +19,8 @@ def upgrade() -> None:
         "llm_base_url",
         "llm_model",
         "encrypted_api_key",
+        "role",
+        "is_active",
     ):
         if column not in columns:
             op.add_column("users", sa.Column(column, sa.String(), nullable=True))
@@ -31,5 +33,7 @@ def downgrade() -> None:
         "llm_base_url",
         "llm_model",
         "encrypted_api_key",
+        "role",
+        "is_active",
     ):
         op.drop_column("users", column)

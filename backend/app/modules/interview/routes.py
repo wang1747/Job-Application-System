@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.models.resume import Resume
 from app.models.jd import JobDescription
 from app.models.interview import InterviewArticle
-from app.services.interview_service import (
+from app.modules.interview.services import (
     import_article,
     list_articles,
     delete_article,
@@ -32,11 +32,11 @@ from app.services.interview_service import (
 )
 from app.agents.graphs.interview_prep import generate_interview_questions
 from app.agents.tools.document_parser import parse_article_file
-from app.services.ocr_service import extract_text_from_image_file
-from app.api.routes.auth import get_current_user_required
+from app.modules.jd.ocr_service import extract_text_from_image_file
+from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
 
-from app.services.ocr_service import extract_text_from_image_file
+from app.modules.jd.ocr_service import extract_text_from_image_file
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,8 @@ async def upload_article_file(
     current_user: User = Depends(get_current_user_required)
 ):
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
     try:
         raw_content = parse_article_file(file.filename, content)
     except ValueError as e:
@@ -207,6 +209,8 @@ async def upload_article_ocr(
     current_user: User = Depends(get_current_user_required)
 ):
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
     try:
         raw_content = extract_text_from_image_file(content, file.filename)
     except ValueError as e:
