@@ -4,16 +4,8 @@ import { useAuthStore } from "./store/authStore";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Layout from "./components/Layout";
-import Dashboard from "./pages/Dashboard";
-import JDAnalysis from "./pages/JDAnalysis";
-import MatchAnalysis from "./pages/MatchAnalysis";
-import ResumeOptimize from "./pages/ResumeOptimize";
-import InterviewPrep from "./pages/InterviewPrep";
-import ApplicationTracker from "./pages/ApplicationTracker";
-import ModelSettings from "./pages/ModelSettings";
 import ModelConfigGate from "./components/ModelConfigGate";
-import UserManagement from "./pages/admin/UserManagement";
-import CostDashboard from "./pages/CostDashboard";
+import { MODULES, type AppModule } from "./modules";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, initialized } = useAuthStore();
@@ -30,6 +22,23 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** 根据模块定义渲染页面 + 守卫 + 模型配置门禁。 */
+function renderModule(mod: AppModule) {
+  const Component = mod.component;
+  const inner = (
+    <Layout>
+      {mod.requireModel ? (
+        <ModelConfigGate>
+          <Component />
+        </ModelConfigGate>
+      ) : (
+        <Component />
+      )}
+    </Layout>
+  );
+  return mod.section === "admin" ? <AdminRoute>{inner}</AdminRoute> : <PrivateRoute>{inner}</PrivateRoute>;
+}
+
 function App() {
   const { initialize } = useAuthStore();
 
@@ -42,102 +51,9 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/jd"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <ModelConfigGate>
-                  <JDAnalysis />
-                </ModelConfigGate>
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/match"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <MatchAnalysis />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/resume"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <ModelConfigGate>
-                  <ResumeOptimize />
-                </ModelConfigGate>
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/interview"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <ModelConfigGate>
-                  <InterviewPrep />
-                </ModelConfigGate>
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/applications"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <ApplicationTracker />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/cost"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <CostDashboard />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <ModelSettings />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <AdminRoute>
-              <Layout>
-                <UserManagement />
-              </Layout>
-            </AdminRoute>
-          }
-        />
+        {MODULES.map((mod) => (
+          <Route key={mod.key} path={mod.path} element={renderModule(mod)} />
+        ))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

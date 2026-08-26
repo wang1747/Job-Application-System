@@ -1,20 +1,31 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { Icons } from "./ui";
+import {
+  WORKSPACE_MODULES,
+  SYSTEM_MODULES,
+  ADMIN_MODULES,
+  type AppModule,
+} from "../modules";
 
-const NAV_ITEMS = [
-  { to: "/", label: "总览", icon: Icons.dashboard, end: true },
-  { to: "/jd", label: "JD 解析", icon: Icons.sparkle },
-  { to: "/resume", label: "简历优化", icon: Icons.resume },
-  { to: "/match", label: "匹配分析", icon: Icons.match },
-  { to: "/interview", label: "面试准备", icon: Icons.interview },
-  { to: "/applications", label: "投递追踪", icon: Icons.track },
-  { to: "/cost", label: "成本看板", icon: Icons.chart },
-];
-
-const SECONDARY_ITEMS = [
-  { to: "/settings", label: "模型设置", icon: Icons.settings },
-];
+function NavItem({ module }: { module: AppModule }) {
+  return (
+    <NavLink
+      to={module.path}
+      end={module.end}
+      className={({ isActive }) =>
+        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+          isActive
+            ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
+            : "text-slate-400 hover:bg-white/5 hover:text-white"
+        }`
+      }
+    >
+      <span className="flex h-5 w-5 items-center justify-center">{module.icon}</span>
+      {module.label}
+    </NavLink>
+  );
+}
 
 export default function Sidebar() {
   const { user, logout } = useAuthStore();
@@ -45,59 +56,19 @@ export default function Sidebar() {
         <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           工作区
         </p>
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                isActive
-                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white"
-              }`
-            }
-          >
-            <span className="flex h-5 w-5 items-center justify-center">{item.icon}</span>
-            {item.label}
-          </NavLink>
+        {WORKSPACE_MODULES.map((mod) => (
+          <NavItem key={mod.key} module={mod} />
         ))}
 
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           系统
         </p>
-        {SECONDARY_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                isActive
-                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white"
-              }`
-            }
-          >
-            <span className="flex h-5 w-5 items-center justify-center">{item.icon}</span>
-            {item.label}
-          </NavLink>
+        {SYSTEM_MODULES.map((mod) => (
+          <NavItem key={mod.key} module={mod} />
         ))}
 
-        {isAdmin && (
-          <NavLink
-            to="/admin/users"
-            className={({ isActive }) =>
-              `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                isActive
-                  ? "bg-brand-600 text-white shadow-lg shadow-brand-600/20"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white"
-              }`
-            }
-          >
-            <span className="flex h-5 w-5 items-center justify-center">{Icons.admin}</span>
-            用户管理
-          </NavLink>
-        )}
+        {isAdmin &&
+          ADMIN_MODULES.map((mod) => <NavItem key={mod.key} module={mod} />)}
       </nav>
 
       {/* User */}
