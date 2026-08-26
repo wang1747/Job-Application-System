@@ -18,6 +18,9 @@ import type {
   User,
   PresetProvider,
   ModelConfig,
+  TraceItem,
+  TraceDetail,
+  CostSummary,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -392,5 +395,17 @@ export const api = {
     clear: () => request<{ message: string }>("/api/v1/user/model-config/", {
       method: "DELETE",
     }),
+  },
+
+  observability: {
+    summary: () => request<CostSummary>("/api/v1/observability/summary"),
+    traces: (page = 1, pageSize = 20, operation?: string) =>
+      request<TraceItem[]>(
+        `/api/v1/observability/traces?page=${page}&page_size=${pageSize}${
+          operation ? `&operation=${encodeURIComponent(operation)}` : ""
+        }`,
+      ),
+    traceDetail: (traceId: string) =>
+      request<TraceDetail>(`/api/v1/observability/traces/${traceId}`),
   },
 };

@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from app.config import get_settings
 from app.core.encryption import decrypt_value
 from app.models.user import User
+from app.observability.observer import get_observer
 
 
 @lru_cache
@@ -26,6 +27,7 @@ def get_llm() -> ChatOpenAI:
         base_url=settings.deepseek_base_url,
         model=settings.llm_model,
         temperature=0.1,
+        callbacks=[get_observer()],
     )
 
 
@@ -49,6 +51,7 @@ def get_user_llm(user: User) -> Optional[ChatOpenAI]:
             base_url=user.llm_base_url,
             model=user.llm_model,
             temperature=0.1,
+            callbacks=[get_observer()],
         )
     except Exception:
         return None

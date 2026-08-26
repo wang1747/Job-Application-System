@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from app.core.llm import get_user_llm_or_raise
 from app.models.user import User
+from app.observability.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,6 @@ jd_analysis_graph = create_jd_analysis_graph()
 async def analyze_jd(raw_text: str, user: User) -> dict:
     """Execute JD analysis with user-specific LLM config"""
     initial_state = {"raw_text": raw_text, "parsed": {}, "error": ""}
-    # 将 user 作为配置传递
-    result = await jd_analysis_graph.ainvoke(initial_state, config={"configurable": {"user": user}})
+    with trace_operation("jd_parse", getattr(user, "id", None)):
+        result = await jd_analysis_graph.ainvoke(initial_state, config={"configurable": {"user": user}})
     return result

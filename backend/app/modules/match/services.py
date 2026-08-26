@@ -1,5 +1,4 @@
 import hashlib
-import math
 import re
 from typing import Dict, List, Optional, Set
 
@@ -9,9 +8,9 @@ from app.models.jd import JobDescription
 from app.models.match import MatchResult
 from app.models.resume import Resume
 from app.core.vector_store import get_vector_store, get_or_create_collection
+from app.core.embeddings import embed_text, embed_hash_fallback
 
-_EMBEDDING_DIM = 384
-_SEMANTIC_COLLECTION = "jd_resume_matches"
+_SEMANTIC_COLLECTION = "jd_resume_matches_v2"
 
 # ============ 本地技能词典匹配（保留作为降级方案） ============
 
@@ -91,6 +90,29 @@ def _skill_sources(jd: JobDescription, resume: Resume) -> tuple:
     return " ".join(jd_parts), " ".join(resume_parts)
 
 
+def _jd_embed_text(jd: JobDescription) -> str:
+    """JD 侧：核心信息前置，must_have 重复加权"""
+    parts = [
+        f"职位：{jd.position or ''} 公司：{jd.company or ''}",
+        "必备技能：" + "、".join(jd.must_have or []),
+        "必备技能：" + "、".join(jd.must_have or []),
+        "加分技能：" + "、".join(jd.nice_to_have or []),
+        "职责要求：" + (jd.raw_text or "")[:600],
+    ]
+    return "\n".join(p for p in parts if p.strip())
+
+
+def _resume_embed_text(resume: Resume) -> str:
+    """简历侧：优先用解析后的结构化字段，raw_text 只做补充"""
+    parsed = resume.parsed_json or {}
+    skills = parsed.get("skills", []) if isinstance(parsed.get("skills"), list) else []
+    parts = [
+        "技能：" + "、".join(skills),
+        (resume.raw_text or "")[:800],
+    ]
+    return "\n".join(p for p in parts if p.strip())
+
+
 def _extract_skill_aliases(term: str) -> List[str]:
     """返回某个技能词可能命中的别名"""
     normalized = _normalize(term)
@@ -135,27 +157,18 @@ def _persist_match(
 
 # ============ 语义匹配（ChromaDB 增强） ============
 
-def _tokenize_for_embedding(text: str) -> List[str]:
-    """将中英文文本拆成词元和汉字 n-gram，供本地向量化使用"""
-    text = (text or "").lower()
-    tokens = re.findall(r"[a-z0-9]+", text)
-    han = re.findall(r"[\u4e00-\u9fff]", text)
-    tokens.extend(han)
-    tokens.extend("".join(han[i:i + 2]) for i in range(len(han) - 1))
-    return tokens
+_jd_embed_cache: Dict[str, tuple] = {}  # jd_id -> (text_hash, embedding)
 
 
-def _get_embedding(text: str) -> List[float]:
-    """本地确定性向量化：不依赖外网，适合 DeepSeek 无 embedding 接口的场景"""
-    vector = [0.0] * _EMBEDDING_DIM
-    for token in _tokenize_for_embedding(text)[:2000]:
-        digest = hashlib.md5(token.encode("utf-8")).digest()
-        index = int.from_bytes(digest[:4], "big") % _EMBEDDING_DIM
-        vector[index] += 1.0
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm == 0:
-        return vector
-    return [value / norm for value in vector]
+def _get_jd_embedding(jd_id: str, jd_text: str):
+    """带缓存的 JD embedding，避免排行榜场景重复计算"""
+    h = hashlib.md5(jd_text.encode("utf-8")).hexdigest()
+    cached = _jd_embed_cache.get(jd_id)
+    if cached and cached[0] == h:
+        return cached[1]
+    vec = embed_text(jd_text) or embed_hash_fallback(jd_text)
+    _jd_embed_cache[jd_id] = (h, vec)
+    return vec
 
 
 def _semantic_score(jd_id: str, jd_text: str, resume_text: str) -> int:
@@ -169,11 +182,11 @@ def _semantic_score(jd_id: str, jd_text: str, resume_text: str) -> int:
         )
         collection.upsert(
             ids=[jd_id],
-            embeddings=[_get_embedding(jd_text)],
+            embeddings=[_get_jd_embedding(jd_id, jd_text)],
             metadatas=[{"jd_id": jd_id}],
         )
 
-        resume_embedding = _get_embedding(resume_text)
+        resume_embedding = embed_text(resume_text) or embed_hash_fallback(resume_text)
         results = collection.query(
             query_embeddings=[resume_embedding],
             n_results=1,
@@ -228,12 +241,24 @@ def calculate_match(jd_id: str, resume_id: str, db: Session, user_id: str) -> di
     nice_weight = 4
     local_score = max(0, min(100, 100 - len(missing) * hard_weight - len(partial) * nice_weight))
     
-    # 2. 语义匹配（ChromaDB）
-    semantic_score = _semantic_score(jd.id, jd_text, resume_text)
-    
-    # 3. 混合分数：语义匹配占 40%，本地匹配占 60%
+    # 2. 语义匹配（ChromaDB，结构化文本）
+    semantic_score = _semantic_score(
+        jd.id, _jd_embed_text(jd), _resume_embed_text(resume)
+    )
+
+    # 3. 语义分定领域基准，硬技能缺口做扣减
     if semantic_score > 0:
-        final_score = int(semantic_score * 0.4 + local_score * 0.6)
+        SEMANTIC_FLOOR, SEMANTIC_CEIL = 45.0, 85.0
+        semantic_pct = max(
+            0.0,
+            min(
+                1.0,
+                (semantic_score - SEMANTIC_FLOOR) / (SEMANTIC_CEIL - SEMANTIC_FLOOR),
+            ),
+        )
+        domain_score = 40 + semantic_pct * 35
+        penalty = min(35, len(missing) * 8 + len(partial) * 2)
+        final_score = int(round(max(0, domain_score - penalty)))
     else:
         final_score = local_score
     

@@ -14,6 +14,7 @@ from app.modules.interview import router as interview_router
 from app.modules.jd import router as jd_router
 from app.modules.match import router as match_router
 from app.modules.model_config import router as model_config_router
+from app.modules.observability import router as observability_router
 from app.modules.resume import router as resume_router
 
 from .config import get_settings
@@ -103,6 +104,7 @@ app.include_router(application_router)
 app.include_router(auth_router)
 app.include_router(model_config_router)
 app.include_router(admin_router)
+app.include_router(observability_router)
 
 register_exception_handlers(app)
 

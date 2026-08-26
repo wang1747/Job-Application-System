@@ -7,6 +7,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.llm import get_user_llm_or_raise
 from app.models.user import User
+from app.observability.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,11 @@ def generate_interview_summary(
 
     try:
         llm = get_user_llm_or_raise(user)
-        response = llm.invoke([
-            SystemMessage(content=SUMMARIZER_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        with trace_operation("mock_interview_summary", getattr(user, "id", None)):
+            response = llm.invoke([
+                SystemMessage(content=SUMMARIZER_PROMPT),
+                HumanMessage(content=prompt),
+            ])
         return _clean_text(response.content)
     except ValueError as e:
         logger.warning(f"生成面试总结失败: {e}")
@@ -100,10 +102,11 @@ def generate_question(
 
     try:
         llm = get_user_llm_or_raise(user)
-        response = llm.invoke([
-            SystemMessage(content=INTERVIEWER_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        with trace_operation("mock_interview_question", getattr(user, "id", None)):
+            response = llm.invoke([
+                SystemMessage(content=INTERVIEWER_PROMPT),
+                HumanMessage(content=prompt),
+            ])
         return _clean_text(response.content)
     except ValueError as e:
         logger.warning(f"生成问题失败: {e}")
@@ -127,10 +130,11 @@ def evaluate_answer(
 
     try:
         llm = get_user_llm_or_raise(user)
-        response = llm.invoke([
-            SystemMessage(content=EVALUATOR_PROMPT),
-            HumanMessage(content=prompt),
-        ])
+        with trace_operation("mock_interview_feedback", getattr(user, "id", None)):
+            response = llm.invoke([
+                SystemMessage(content=EVALUATOR_PROMPT),
+                HumanMessage(content=prompt),
+            ])
         return _clean_text(response.content)
     except ValueError as e:
         logger.warning(f"评估回答失败: {e}")

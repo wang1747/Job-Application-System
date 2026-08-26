@@ -218,3 +218,55 @@ export interface ModelConfig {
   api_key_masked: string;
   has_config: boolean;
 }
+
+// ===== 可观测（成本看板 / 执行追踪） =====
+export interface TraceItem {
+  id: string;
+  operation: string;
+  status: string;
+  total_tokens: number;
+  total_cost: number;
+  duration_ms: number;
+  span_count: number;
+  created_at: string | null;
+}
+
+export interface SpanItem {
+  id: string;
+  run_id: string | null;
+  model: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cost: number | null;
+  duration_ms: number;
+  start_offset_ms: number;
+  status: string;
+}
+
+export interface TraceDetail {
+  trace: TraceItem;
+  spans: SpanItem[];
+}
+
+export interface OperationCost {
+  operation: string;
+  cost: number;
+  tokens: number;
+  count: number;
+}
+
+export interface ModelCost {
+  model: string;
+  cost: number;
+  tokens: number;
+  count: number;
+}
+
+export interface CostSummary {
+  total_cost: number;
+  total_tokens: number;
+  trace_count: number;
+  by_operation: OperationCost[];
+  by_model: ModelCost[];
+}

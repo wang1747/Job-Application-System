@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 
 from app.core.llm import get_user_llm_or_raise
 from app.models.user import User
+from app.observability.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +153,9 @@ async def generate_interview_questions(
         "questions": [],
         "error": ""
     }
-    result = await interview_prep_graph.ainvoke(
-        initial,
-        config={"configurable": {"user": user}}
-    )
+    with trace_operation("interview_prep", getattr(user, "id", None)):
+        result = await interview_prep_graph.ainvoke(
+            initial,
+            config={"configurable": {"user": user}}
+        )
     return result

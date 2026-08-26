@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: "/match", label: "匹配分析", icon: Icons.match },
   { to: "/interview", label: "面试准备", icon: Icons.interview },
   { to: "/applications", label: "投递追踪", icon: Icons.track },
+  { to: "/cost", label: "成本看板", icon: Icons.chart },
 ];
 
 const SECONDARY_ITEMS = [

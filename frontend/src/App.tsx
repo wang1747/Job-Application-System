@@ -13,6 +13,7 @@ import ApplicationTracker from "./pages/ApplicationTracker";
 import ModelSettings from "./pages/ModelSettings";
 import ModelConfigGate from "./components/ModelConfigGate";
 import UserManagement from "./pages/admin/UserManagement";
+import CostDashboard from "./pages/CostDashboard";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, initialized } = useAuthStore();
@@ -103,6 +104,16 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <ApplicationTracker />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/cost"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <CostDashboard />
               </Layout>
             </PrivateRoute>
           }

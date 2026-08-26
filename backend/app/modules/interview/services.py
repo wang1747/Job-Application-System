@@ -16,6 +16,7 @@ from app.agents.graphs.mock_interview import (
     generate_interview_summary,
 )
 from app.core.llm import get_user_llm_or_raise
+from app.observability.tracing import trace_operation
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +191,11 @@ def extract_article_metadata(raw_content: str, user: User) -> dict:
     )
     try:
         llm = get_user_llm_or_raise(user)
-        response = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=raw_content or ""),
-        ])
+        with trace_operation("article_extract", getattr(user, "id", None)):
+            response = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=raw_content or ""),
+            ])
         parsed = json.loads(_clean_json_response(response.content))
         return {
             "questions": parsed.get("questions", []) if isinstance(parsed.get("questions"), list) else [],
