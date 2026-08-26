@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from typing import Optional
 
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.modules.resume.services import list_resumes, upload_resume, get_resume_versions, save_optimized_version
-from app.agents.tools.resume_parser import parse_resume_bytes
-from app.agents.graphs.resume_optimize import optimize_resume
-from app.agents.tools.ats_checker import check_ats_compatibility
-from app.models.resume import Resume
-from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
+from app.modules.auth.routes import get_current_user_required
 from app.modules.resume.export_service import export_to_pdf, export_to_word
+from app.modules.resume.parser import parse_resume_bytes
+from app.modules.resume.services import (
+    get_resume_versions,
+    list_resumes,
+    optimize_resume_flow,
+    upload_resume,
+)
 
 router = APIRouter()
 
@@ -21,12 +24,17 @@ class ResumeUploadRequest(BaseModel):
     source_file: Optional[str] = None
 
 
+class ResumeOptimizeRequest(BaseModel):
+    resume_id: str
+    jd_text: str = ""
+    jd_id: Optional[str] = None
+
+
 @router.get("/list")
 async def get_resume_list(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """获取简历列表"""
     resumes = list_resumes(db, user_id=current_user.id)
     return {"success": True, "data": resumes, "error": None}
 
@@ -35,49 +43,53 @@ async def get_resume_list(
 async def upload_resume_endpoint(
     req: ResumeUploadRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """上传简历文本"""
-    resume = upload_resume(
-        raw_text=req.raw_text,
-        source_file=req.source_file,
-        db=db,
-        user_id=current_user.id
-    )
-    return {"success": True, "data": {"id": resume.id, "version": resume.version}, "error": None}
+    try:
+        resume = upload_resume(
+            raw_text=req.raw_text,
+            source_file=req.source_file,
+            db=db,
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "success": True,
+        "data": {"id": resume.id, "version": resume.version},
+        "error": None,
+    }
 
 
 @router.post("/upload-file")
 async def upload_resume_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """上传简历文件（PDF/MD/TXT）"""
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
-    
+
     try:
         raw_text = parse_resume_bytes(file.filename, content)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    resume = upload_resume(
-        raw_text=raw_text,
-        source_file=file.filename,
-        db=db,
-        user_id=current_user.id
-    )
-    
+        resume = upload_resume(
+            raw_text=raw_text,
+            source_file=file.filename,
+            db=db,
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     return {
         "success": True,
         "data": {
             "id": resume.id,
             "version": resume.version,
-            "filename": file.filename
+            "filename": file.filename,
         },
-        "error": None
+        "error": None,
     }
 
 
@@ -85,9 +97,8 @@ async def upload_resume_file(
 async def get_resume_versions_endpoint(
     resume_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """获取简历版本历史"""
     versions = get_resume_versions(resume_id, db, user_id=current_user.id)
     if versions is None:
         raise HTTPException(status_code=404, detail="简历不存在")
@@ -108,63 +119,27 @@ async def get_resume_versions_endpoint(
     }
 
 
-class ResumeOptimizeRequest(BaseModel):
-    resume_id: str
-    jd_text: str
-
-
 @router.post("/optimize")
 async def optimize_resume_endpoint(
     req: ResumeOptimizeRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """针对 JD 优化简历"""
-    # 获取简历
-    resume = db.query(Resume).filter(
-        Resume.id == req.resume_id,
-        Resume.user_id == current_user.id
-    ).first()
-    
-    if not resume:
-        raise HTTPException(status_code=404, detail="简历不存在")
-    
-    # 执行优化 - 传入 current_user
-    result = await optimize_resume(
-        resume_text=resume.raw_text,
-        jd_text=req.jd_text,
-        user=current_user
-    )
-    
-    if result.get("error"):
-        return {"success": False, "data": None, "error": result["error"]}
-
-    optimized = result.get("optimized", "")
-    changes = result.get("changes", [])
-    new_version = None
-    if optimized and optimized.strip():
-        new_version = save_optimized_version(
+    try:
+        result = await optimize_resume_flow(
             req.resume_id,
-            optimized,
-            changes,
+            req.jd_text,
             db,
-            user_id=current_user.id
+            current_user,
+            jd_id=req.jd_id,
         )
-    
-    return {
-        "success": True,
-        "data": {
-            "optimized": optimized,
-            "changes": changes,
-            "ats": check_ats_compatibility(resume.raw_text, req.jd_text),
-            "ats_after": check_ats_compatibility(optimized, req.jd_text),
-            "new_version": {
-                "id": new_version.id,
-                "version": new_version.version,
-            } if new_version else None,
-        },
-        "error": None
-    }
+    except ValueError as exc:
+        if str(exc) == "resume_not_found":
+            raise HTTPException(status_code=404, detail="简历不存在")
+        if str(exc) == "jd_not_found":
+            raise HTTPException(status_code=404, detail="目标 JD 不存在")
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
 
 
 @router.get("/{resume_id}/export")
@@ -172,30 +147,31 @@ async def export_resume(
     resume_id: str,
     format: str = "pdf",
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
+    current_user: User = Depends(get_current_user_required),
 ):
-    """导出简历（PDF 或 Word）"""
+    from app.models.resume import Resume
+
     resume = db.query(Resume).filter(
         Resume.id == resume_id,
-        Resume.user_id == current_user.id
+        Resume.user_id == current_user.id,
     ).first()
-    
     if not resume:
         raise HTTPException(status_code=404, detail="简历不存在")
-    
-    if format.lower() == "pdf":
+
+    fmt = format.lower()
+    if fmt == "pdf":
         content = export_to_pdf(resume)
         media_type = "application/pdf"
         filename = f"resume_{resume_id}.pdf"
-    elif format.lower() == "word" or format.lower() == "docx":
+    elif fmt in ("word", "docx"):
         content = export_to_word(resume)
         media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         filename = f"resume_{resume_id}.docx"
     else:
         raise HTTPException(status_code=400, detail="不支持的格式，请使用 pdf 或 word")
-    
+
     return Response(
         content=content,
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

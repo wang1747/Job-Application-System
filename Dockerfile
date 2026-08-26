@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     tesseract-ocr \
     tesseract-ocr-chi-sim \
+    fonts-wqy-zenhei \
+    fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

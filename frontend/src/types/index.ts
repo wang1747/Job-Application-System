@@ -64,24 +64,54 @@ export interface ResumeItem {
   parsed_json?: {
     sections?: string[];
     skills?: string[];
-    changes?: string[];
+    changes?: ChangeItem[];
     kind?: string;
     parent_id?: string;
+    target_jd?: { id?: string | null; company?: string; position?: string };
+    added_keywords?: string[];
   } | null;
   created_at?: string;
+  version_count?: number;
+  document_id?: string;
 }
 
 export interface AtsResult {
   score: number;
   issues: string[];
   suggestions: string[];
+  matched_keywords?: string[];
+  missing_keywords?: string[];
+}
+
+export interface ChangeItem {
+  section: string;
+  before: string;
+  after: string;
+  reason: string;
 }
 
 export interface OptimizeResult {
   optimized: string;
-  changes: string[];
+  changes: ChangeItem[];
+  added_keywords: string[];
+  removed_keywords: string[];
+  removed: string[];
+  length_warning: string;
+  gap: {
+    matched: string[];
+    missing: string[];
+    partial: string[];
+  };
+  target_jd: { id: string | null; company: string; position: string };
   ats: AtsResult;
   ats_after: AtsResult;
+  preservation: {
+    score: number;
+    passed: boolean;
+    fallback: boolean;
+    missing_facts: string[];
+  };
+  edits_applied?: number;
   new_version: { id: string; version: number } | null;
 }
 

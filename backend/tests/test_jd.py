@@ -36,3 +36,37 @@ def test_jd_list_empty(db_session):
         JobDescription.user_id == settings.default_user_id
     ).all()
     assert len(jds) == 0
+
+
+def test_jd_update_api(client, sample_jd_text):
+    """测试手动修改 JD 公司/职位"""
+    response = client.post("/api/v1/jd/parse", json={"raw_text": sample_jd_text})
+    jd_id = response.json()["data"]["id"]
+
+    update = client.put(
+        f"/api/v1/jd/{jd_id}",
+        json={"company": "腾讯", "position": "高级后端工程师"},
+    )
+    assert update.status_code == 200
+    data = update.json()["data"]
+    assert data["company"] == "腾讯"
+    assert data["position"] == "高级后端工程师"
+
+    listing = client.get("/api/v1/jd/list").json()["data"]
+    assert listing[0]["company"] == "腾讯"
+    assert listing[0]["position"] == "高级后端工程师"
+
+
+def test_jd_update_requires_field(client, sample_jd_text):
+    """测试公司/职位都为空时返回 400"""
+    response = client.post("/api/v1/jd/parse", json={"raw_text": sample_jd_text})
+    jd_id = response.json()["data"]["id"]
+
+    update = client.put(f"/api/v1/jd/{jd_id}", json={})
+    assert update.status_code == 400
+
+
+def test_jd_update_not_found(client):
+    """测试更新不存在的 JD 返回 404"""
+    update = client.put("/api/v1/jd/nonexistent", json={"company": "腾讯"})
+    assert update.status_code == 404

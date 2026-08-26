@@ -16,6 +16,10 @@ export default function JDAnalysis() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<JDItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCompany, setEditCompany] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -94,6 +98,35 @@ export default function JDAnalysis() {
     } catch (err) {
       console.error("删除失败:", err);
       showError("删除失败，请重试");
+    }
+  };
+
+  const startEdit = (item: JDItem) => {
+    setEditingId(item.id);
+    setEditCompany(item.company || "");
+    setEditPosition(item.position || "");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCompany("");
+    setEditPosition("");
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    const company = editCompany.trim();
+    const position = editPosition.trim();
+    if (!company && !position) { showError("公司或职位至少填写一项"); return; }
+    setSavingEdit(true);
+    try {
+      await api.jd.update(id, { company, position });
+      await loadHistory();
+      cancelEdit();
+    } catch (err) {
+      console.error("保存失败:", err);
+      showError("保存失败，请重试");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -224,23 +257,65 @@ export default function JDAnalysis() {
             {history.map((item) => (
               <div
                 key={item.id}
-                className="of-card-hover flex items-center justify-between p-4 cursor-pointer"
+                className="of-card-hover p-4 cursor-pointer"
                 onClick={() => handleSelectHistory(item)}
               >
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium text-slate-900">{item.company || "未知公司"}</span>
-                  <span className="mx-2 text-slate-300">·</span>
-                  <span className="text-sm text-slate-600">{item.position || "未知职位"}</span>
-                  <span className="ml-3 hidden text-xs text-slate-400 sm:inline">
-                    {formatTime(item.created_at || "")}
-                  </span>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-                  className="of-btn-danger px-2.5 py-1 text-xs"
-                >
-                  删除
-                </button>
+                {editingId === item.id ? (
+                  <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      className="of-input w-44"
+                      placeholder="公司"
+                      value={editCompany}
+                      onChange={(e) => setEditCompany(e.target.value)}
+                      aria-label="编辑公司"
+                    />
+                    <input
+                      className="of-input w-44"
+                      placeholder="职位"
+                      value={editPosition}
+                      onChange={(e) => setEditPosition(e.target.value)}
+                      aria-label="编辑职位"
+                    />
+                    <button
+                      onClick={() => handleSaveEdit(item.id)}
+                      disabled={savingEdit}
+                      className="of-btn-primary px-3 py-1 text-xs"
+                    >
+                      {savingEdit ? "保存中..." : "保存"}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="of-btn-outline px-3 py-1 text-xs"
+                    >
+                      取消
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium text-slate-900">{item.company || "未知公司"}</span>
+                      <span className="mx-2 text-slate-300">·</span>
+                      <span className="text-sm text-slate-600">{item.position || "未知职位"}</span>
+                      <span className="ml-3 hidden text-xs text-slate-400 sm:inline">
+                        {formatTime(item.created_at || "")}
+                      </span>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEdit(item); }}
+                        className="of-btn-outline px-2.5 py-1 text-xs"
+                      >
+                        编辑
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                        className="of-btn-danger px-2.5 py-1 text-xs"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

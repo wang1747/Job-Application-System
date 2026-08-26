@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from fastapi import File, UploadFile
 from pydantic import BaseModel
+from typing import Optional
 
 from app.core.database import get_db
-from app.modules.jd.services import parse_and_save, list_jds, delete_jd
+from app.modules.jd.services import parse_and_save, list_jds, delete_jd, update_jd
 from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
 from app.modules.jd.ocr_service import extract_text_from_image_file
@@ -14,6 +15,11 @@ router = APIRouter()
 
 class JDParseRequest(BaseModel):
     raw_text: str
+
+
+class JDUpdateRequest(BaseModel):
+    company: Optional[str] = None
+    position: Optional[str] = None
 
 
 @router.get("/list")
@@ -83,3 +89,28 @@ async def delete_jd_route(
     if not delete_jd(jd_id, db, user_id=current_user.id):
         raise HTTPException(status_code=404, detail="JD does not exist")
     return {"success": True, "data": None, "error": None}
+
+
+@router.put("/{jd_id}")
+async def update_jd_route(
+    jd_id: str,
+    req: JDUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    if req.company is None and req.position is None:
+        raise HTTPException(status_code=400, detail="请至少填写公司或职位")
+    jd = update_jd(
+        jd_id,
+        db=db,
+        user_id=current_user.id,
+        company=req.company,
+        position=req.position,
+    )
+    if not jd:
+        raise HTTPException(status_code=404, detail="JD does not exist")
+    return {
+        "success": True,
+        "data": {"id": jd.id, "company": jd.company, "position": jd.position},
+        "error": None,
+    }

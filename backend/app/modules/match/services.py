@@ -9,65 +9,11 @@ from app.models.match import MatchResult
 from app.models.resume import Resume
 from app.core.vector_store import get_vector_store, get_or_create_collection
 from app.core.embeddings import embed_text, embed_hash_fallback
+from app.core.text_utils import SKILL_ALIASES, extract_skills as _extract_skills, normalize_text as _normalize
 
 _SEMANTIC_COLLECTION = "jd_resume_matches_v2"
 
 # ============ 本地技能词典匹配（保留作为降级方案） ============
-
-SKILL_ALIASES: Dict[str, List[str]] = {
-    "Python": ["python", "python3", "py"],
-    "Java": ["java"],
-    "Go": ["go", "golang"],
-    "C++": ["c++", "cpp"],
-    "JavaScript": ["javascript", "js"],
-    "TypeScript": ["typescript", "ts"],
-    "React": ["react"],
-    "Vue": ["vue", "vuejs"],
-    "Node.js": ["node", "nodejs", "node.js"],
-    "FastAPI": ["fastapi"],
-    "Flask": ["flask"],
-    "Django": ["django"],
-    "SQL": ["sql", "sqlite"],
-    "MySQL": ["mysql"],
-    "PostgreSQL": ["postgresql", "postgres"],
-    "Redis": ["redis"],
-    "Docker": ["docker"],
-    "Kubernetes": ["kubernetes", "k8s"],
-    "AWS": ["aws", "亚马逊云"],
-    "Git": ["git", "github", "gitlab"],
-    "Linux": ["linux", "unix"],
-    "Spring Boot": ["spring boot", "spring"],
-    "Kafka": ["kafka"],
-    "Nginx": ["nginx"],
-    "CI/CD": ["ci/cd", "cicd", "jenkins"],
-    "微服务": ["微服务", "microservice", "micro services"],
-    "高并发": ["高并发", "high concurrency", "high-concurrency"],
-    "分布式": ["分布式", "distributed"],
-    "消息队列": ["消息队列", "message queue", "mq"],
-    "RESTful API": ["restful", "rest api", "rest"],
-    "算法": ["算法", "algorithm", "leetcode"],
-    "机器学习": ["机器学习", "machine learning", "ml"],
-    "深度学习": ["深度学习", "deep learning", "dl"],
-    "数据分析": ["数据分析", "data analysis"],
-    "测试": ["测试", "pytest", "单元测试", "unit test"],
-    "安全": ["安全", "security"],
-}
-
-
-def _normalize(text: str) -> str:
-    text = (text or "").lower()
-    text = re.sub(r"[_\-\s]+", " ", text)
-    return text
-
-
-def _extract_skills(text: str) -> Set[str]:
-    """从文本中识别已知技能"""
-    normalized = _normalize(text)
-    found: Set[str] = set()
-    for skill, aliases in SKILL_ALIASES.items():
-        if any(alias in normalized for alias in aliases):
-            found.add(skill)
-    return found
 
 
 def _skill_sources(jd: JobDescription, resume: Resume) -> tuple:
@@ -225,7 +171,7 @@ def calculate_match(jd_id: str, resume_id: str, db: Session, user_id: str) -> di
         raise ValueError("简历不存在")
 
     jd_text, resume_text = _skill_sources(jd, resume)
-    
+
     # 1. 本地技能词典匹配
     jd_skills = _extract_skills(jd_text)
     resume_skills = _extract_skills(resume_text)
@@ -240,7 +186,7 @@ def calculate_match(jd_id: str, resume_id: str, db: Session, user_id: str) -> di
     hard_weight = 12
     nice_weight = 4
     local_score = max(0, min(100, 100 - len(missing) * hard_weight - len(partial) * nice_weight))
-    
+
     # 2. 语义匹配（ChromaDB，结构化文本）
     semantic_score = _semantic_score(
         jd.id, _jd_embed_text(jd), _resume_embed_text(resume)
@@ -261,7 +207,7 @@ def calculate_match(jd_id: str, resume_id: str, db: Session, user_id: str) -> di
         final_score = int(round(max(0, domain_score - penalty)))
     else:
         final_score = local_score
-    
+
     suggestion = (
         "匹配度较高，可以直接投递。"
         if final_score >= 80

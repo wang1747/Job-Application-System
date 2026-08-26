@@ -183,6 +183,17 @@ export const api = {
       }>("/api/v1/jd/ocr", formData);
     },
     list: () => request<JDItem[]>("/api/v1/jd/list"),
+    update: (
+      id: string,
+      payload: { company?: string; position?: string },
+    ) =>
+      request<{ id: string; company?: string; position?: string }>(
+        `/api/v1/jd/${id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      ),
     delete: (id: string) =>
       request<null>(`/api/v1/jd/${id}`, { method: "DELETE" }),
   },
@@ -203,10 +214,14 @@ export const api = {
         formData,
       );
     },
-    optimize: (resumeId: string, jdText: string) =>
+    optimize: (resumeId: string, jdText: string, jdId?: string) =>
       request<OptimizeResult>("/api/v1/resume/optimize", {
         method: "POST",
-        body: JSON.stringify({ resume_id: resumeId, jd_text: jdText }),
+        body: JSON.stringify({
+          resume_id: resumeId,
+          jd_text: jdText,
+          jd_id: jdId || null,
+        }),
       }),
     versions: (resumeId: string) =>
       request<ResumeItem[]>(`/api/v1/resume/${resumeId}/versions`),

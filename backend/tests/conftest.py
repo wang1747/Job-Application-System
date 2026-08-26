@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -35,9 +36,18 @@ class FakeLLM:
                 "hidden_signals": ["团队扩张快"],
             }
         elif "简历优化专家" in content:
+            # 提取【原始简历】原文，返回「无改动」的整份重写结果（确定性、离线）
+            m = re.search(
+                r"【原始简历】\n(.*?)\n\n【目标岗位结构化需求】",
+                content,
+                re.DOTALL,
+            )
+            resume = m.group(1).strip() if m else "Test Resume"
             payload = {
-                "optimized": "优化后的简历内容，突出 Python 和高并发经验。",
-                "changes": ["突出了 Python 经验", "补充了量化成果"],
+                "optimized_text": resume,
+                "changes": [],
+                "added_keywords": [],
+                "removed_keywords": [],
             }
         elif "面试题生成专家" in content:
             payload = {
@@ -62,11 +72,11 @@ def _fake_llm(monkeypatch):
     import app.agents.graphs.interview_prep as interview_prep
     import app.agents.graphs.jd_analysis as jd_analysis
     import app.agents.graphs.mock_interview as mock_interview
-    import app.agents.graphs.resume_optimize as resume_optimize
     import app.modules.interview.services as interview_service
+    import app.modules.resume.optimizer.service as optimizer_service
 
     monkeypatch.setattr(jd_analysis, "get_user_llm_or_raise", lambda user: fake)
-    monkeypatch.setattr(resume_optimize, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(optimizer_service, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(interview_prep, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(mock_interview, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(interview_service, "get_user_llm_or_raise", lambda user: fake)

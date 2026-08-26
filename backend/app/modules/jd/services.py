@@ -49,3 +49,25 @@ def delete_jd(jd_id: str, db: Session, user_id: str) -> bool:
     db.delete(jd)
     db.commit()
     return True
+
+
+def update_jd(
+    jd_id: str,
+    db: Session,
+    user_id: str,
+    company: Optional[str] = None,
+    position: Optional[str] = None,
+):
+    jd = db.query(JobDescription).filter(
+        JobDescription.id == jd_id,
+        JobDescription.user_id == user_id
+    ).first()
+    if not jd:
+        return None
+    if company is not None:
+        jd.company = company.strip() or None
+    if position is not None:
+        jd.position = position.strip() or None
+    db.commit()
+    db.refresh(jd)
+    return jd
