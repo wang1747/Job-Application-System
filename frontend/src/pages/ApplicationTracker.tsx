@@ -5,6 +5,7 @@ import StatsDashboard from "../components/StatsDashboard";
 import { STATUS_LABELS, STATUS_ORDER } from "../constants/application";
 import type { Application, ApplicationStatus, JDItem, Reminders, ResumeItem } from "../types";
 import { Card, PageHeader, SectionTitle, Modal, Badge, Icons } from "../components/ui";
+import { resumeLabel } from "../utils/resume";
 
 interface EditForm {
   status: string; applied_date: string; next_action: string;
@@ -173,8 +174,8 @@ const ApplicationTracker: FC = () => {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="公司名称" className="of-input" aria-label="公司名称" />
           <input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="职位" className="of-input" aria-label="职位" />
-          <select value={jdId} onChange={(e) => setJdId(e.target.value)} className="of-select" aria-label="关联 JD">
-            <option value="">关联 JD（可选）</option>
+          <select value={jdId} onChange={(e) => setJdId(e.target.value)} className="of-select" aria-label="关联岗位">
+            <option value="">关联岗位（可选）</option>
             {jds.map((jd) => (
               <option key={jd.id} value={jd.id}>{jd.company || "未知公司"} · {jd.position || "未知职位"}</option>
             ))}
@@ -182,7 +183,7 @@ const ApplicationTracker: FC = () => {
           <select value={resumeId} onChange={(e) => setResumeId(e.target.value)} className="of-select" aria-label="关联简历">
             <option value="">关联简历（可选）</option>
             {resumes.map((resume) => (
-              <option key={resume.id} value={resume.id}>{resume.source_file || "手动输入"}</option>
+              <option key={resume.id} value={resume.id}>{resumeLabel(resume)}</option>
             ))}
           </select>
           <button onClick={handleCreate} disabled={saving} className="of-btn-primary">

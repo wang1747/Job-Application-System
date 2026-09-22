@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.models.jd import JobDescription
 from app.models.user import User
+from app.models.application import Application
+from app.models.match import MatchResult
 from app.agents.graphs.jd_analysis import analyze_jd
 
 
@@ -30,6 +32,23 @@ async def parse_and_save(raw_text: str, db: Session, user_id: str) -> dict:
     db.add(jd)
     db.commit()
     db.refresh(jd)
+
+    # 贡献语料：用户已同意「贡献语料」才写入共享语料库（默认关闭）
+    if user.allow_corpus:
+        try:
+            from app.modules.corpus.services import add_corpus_item
+            add_corpus_item(
+                item_type="jd",
+                raw_text=raw_text,
+                db=db,
+                structured=parsed,
+                source="user_upload",
+                user_id=user_id,
+                is_public=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[WARN] JD 贡献语料失败: {e}")
+
     return {"success": True, "data": {"id": jd.id, "parsed": parsed}, "error": None}
 
 
@@ -46,6 +65,14 @@ def delete_jd(jd_id: str, db: Session, user_id: str) -> bool:
     ).first()
     if not jd:
         return False
+    # 级联清理：删除关联的匹配结果，投递记录解除 JD 关联（避免孤儿数据）
+    db.query(MatchResult).filter(
+        MatchResult.jd_id == jd_id
+    ).delete(synchronize_session=False)
+    db.query(Application).filter(
+        Application.jd_id == jd_id,
+        Application.user_id == user_id,
+    ).update({"jd_id": None}, synchronize_session=False)
     db.delete(jd)
     db.commit()
     return True

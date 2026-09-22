@@ -15,12 +15,24 @@ import type {
   ResumeItem,
   SimulateAnswer,
   SimulateSession,
+  NegotiationStart,
+  NegotiationAnswer,
+  NegotiationSummary,
+  SalaryReference,
+  SalaryBenchmarkInfo,
   User,
   PresetProvider,
   ModelConfig,
   TraceItem,
   TraceDetail,
   CostSummary,
+  ResumeGenerationResult,
+  ResumeGenerationEducation,
+  ResumeGenerationExperience,
+  RecommendSkillsResult,
+  CommunityPost,
+  CommunityPostDetail,
+  Feedback,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "";
@@ -121,22 +133,45 @@ export async function downloadResumeExport(
 }
 
 export async function loginRequest(
-  username: string,
+  email: string,
   password: string,
 ): Promise<ApiResponse<LoginResponse>> {
   return request("/api/v1/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username: email, password }),
   });
 }
 
 export async function registerRequest(
+  account: string,
   name: string,
   password: string,
-): Promise<ApiResponse<{ id: string; name: string; created_at: string }>> {
+): Promise<ApiResponse<{ id: string; name: string; email?: string; created_at: string }>> {
   return request("/api/v1/auth/register", {
     method: "POST",
-    body: JSON.stringify({ name, password }),
+    body: JSON.stringify({ account, name, password }),
+  });
+}
+
+export async function sendResetCode(
+  account: string,
+  email?: string,
+): Promise<ApiResponse<{ message: string; email_masked?: string }>> {
+  return request("/api/v1/auth/forgot-password/send-code", {
+    method: "POST",
+    body: JSON.stringify({ account, email: email || null }),
+  });
+}
+
+export async function resetPassword(
+  account: string,
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<ApiResponse<{ message: string }>> {
+  return request("/api/v1/auth/forgot-password/reset", {
+    method: "POST",
+    body: JSON.stringify({ account, email, code, new_password: newPassword }),
   });
 }
 
@@ -150,6 +185,29 @@ export const api = {
     logout: () =>
       request<{ message: string }>("/api/v1/auth/logout", {
         method: "POST",
+      }),
+    changePassword: (oldPassword: string, newPassword: string) =>
+      request<{ message: string }>("/api/v1/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      }),
+    updateProfile: (name: string) =>
+      request<User>("/api/v1/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
+    sendChangeEmailCode: (newEmail: string) =>
+      request<{ message: string; email_masked?: string }>(
+        "/api/v1/auth/change-email/send-code",
+        {
+          method: "POST",
+          body: JSON.stringify({ new_email: newEmail }),
+        },
+      ),
+    changeEmail: (newEmail: string, code: string) =>
+      request<User>("/api/v1/auth/change-email", {
+        method: "POST",
+        body: JSON.stringify({ new_email: newEmail, code }),
       }),
   },
 
@@ -165,6 +223,14 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ is_active }),
       }),
+    resetPassword: (id: string, new_password: string) =>
+      request<{ id: string; name: string }>(
+        `/api/v1/admin/users/${id}/reset_password`,
+        {
+          method: "POST",
+          body: JSON.stringify({ new_password }),
+        },
+      ),
   },
 
   jd: {
@@ -225,6 +291,93 @@ export const api = {
       }),
     versions: (resumeId: string) =>
       request<ResumeItem[]>(`/api/v1/resume/${resumeId}/versions`),
+    rollback: (resumeId: string, versionId: string) =>
+      request<{ id: string; version: number }>(
+        `/api/v1/resume/${resumeId}/versions/${versionId}/rollback`,
+        { method: "POST" },
+      ),
+    exportData: async (): Promise<Blob> => {
+      const headers: HeadersInit = {};
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetchResponse(`${BASE_URL}/api/v1/resume/export-data`, {
+        headers,
+      });
+      if (!res.ok) throw new Error(`导出失败 HTTP ${res.status}`);
+      return res.blob();
+    },
+    delete: (resumeId: string) =>
+      request<{ deleted: number }>(`/api/v1/resume/${resumeId}`, {
+        method: "DELETE",
+      }),
+    deleteAll: () =>
+      request<{ deleted: number }>("/api/v1/resume/all", { method: "DELETE" }),
+  },
+
+  resumeGeneration: {
+    generate: (payload: {
+      name: string;
+      position: string;
+      phone?: string;
+      email?: string;
+      github?: string;
+      summary?: string;
+      direction?: string;
+      education: ResumeGenerationEducation[];
+      experiences: ResumeGenerationExperience[];
+      skills: string[];
+      certifications?: string[];
+      jd_text?: string;
+      jd_id?: string;
+    }) =>
+      request<ResumeGenerationResult>("/api/v1/resume-generation/generate", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    regenerateSection: (payload: {
+      resume_id: string;
+      structured: Record<string, unknown>;
+      section: string;
+      index?: number;
+      jd_text?: string;
+      jd_id?: string;
+    }) =>
+      request<ResumeGenerationResult>(
+        "/api/v1/resume-generation/regenerate-section",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      ),
+    regenerateSectionVariants: (payload: {
+      resume_id: string;
+      structured: Record<string, unknown>;
+      section: string;
+      index?: number;
+      jd_text?: string;
+      jd_id?: string;
+    }) =>
+      request<{ candidates: unknown[] }>(
+        "/api/v1/resume-generation/regenerate-section-variants",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      ),
+    save: (payload: {
+      resume_id: string;
+      structured: Record<string, unknown>;
+      jd_text?: string;
+      jd_id?: string;
+    }) =>
+      request<ResumeGenerationResult>("/api/v1/resume-generation/save", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    recommendSkills: (direction?: string, limit?: number) =>
+      request<RecommendSkillsResult>(
+        `/api/v1/resume-generation/recommend-skills?direction=${direction ?? ""}&limit=${limit ?? 12}`,
+      ),
   },
 
   match: {
@@ -328,6 +481,56 @@ export const api = {
         feedbacks: string[];
         status: string;
       }>(`/api/v1/interview/simulate/${sessionId}/summary`),
+    simulateFinish: (sessionId: string) =>
+      request<null>(`/api/v1/interview/simulate/${sessionId}/finish`, {
+        method: "POST",
+      }),
+  },
+
+  salaryNegotiation: {
+    start: (payload: {
+      scenario: string;
+      target_salary?: string;
+      bottom_salary?: string;
+      context?: string;
+    }) =>
+      request<NegotiationStart>("/api/v1/salary-negotiation/start", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    answer: (sessionId: string, answer: string) =>
+      request<NegotiationAnswer>(`/api/v1/salary-negotiation/${sessionId}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ answer }),
+      }),
+    summary: (sessionId: string) =>
+      request<NegotiationSummary>(`/api/v1/salary-negotiation/${sessionId}/summary`),
+    reference: (payload: {
+      resume_id?: string;
+      resume_text?: string;
+      target_city?: string;
+      position_hint?: string;
+    }) =>
+      request<SalaryReference>("/api/v1/salary-negotiation/reference", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    benchmarkInfo: () =>
+      request<SalaryBenchmarkInfo>("/api/v1/salary-negotiation/benchmark/info"),
+    benchmarkRefresh: () =>
+      request<SalaryBenchmarkInfo>("/api/v1/salary-negotiation/benchmark/refresh", {
+        method: "POST",
+      }),
+    benchmarkImport: (payload: {
+      data: Record<string, unknown>;
+      data_year?: string;
+      source?: string;
+      note?: string;
+    }) =>
+      request<SalaryBenchmarkInfo>("/api/v1/salary-negotiation/benchmark/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
   },
 
   applications: {
@@ -422,5 +625,66 @@ export const api = {
       ),
     traceDetail: (traceId: string) =>
       request<TraceDetail>(`/api/v1/observability/traces/${traceId}`),
+  },
+
+  community: {
+    createPost: (payload: { title: string; content: string; category?: string; tags?: string[] }) =>
+      request<{ id: string }>("/api/v1/community/posts", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    listPosts: (category?: string, page = 1, pageSize = 20) =>
+      request<{ items: CommunityPost[]; total: number }>(
+        `/api/v1/community/posts?page=${page}&page_size=${pageSize}${
+          category ? `&category=${encodeURIComponent(category)}` : ""
+        }`,
+      ),
+    postDetail: (id: string) => request<CommunityPostDetail>(`/api/v1/community/posts/${id}`),
+    addComment: (id: string, content: string) =>
+      request<{ id: string }>(`/api/v1/community/posts/${id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      }),
+    toggleLike: (id: string) =>
+      request<{ liked: boolean; like_count: number }>(`/api/v1/community/posts/${id}/like`, {
+        method: "POST",
+      }),
+    deletePost: (id: string) =>
+      request<null>(`/api/v1/community/posts/${id}`, { method: "DELETE" }),
+    deleteComment: (id: string) =>
+      request<null>(`/api/v1/community/comments/${id}`, { method: "DELETE" }),
+  },
+
+  feedback: {
+    create: (payload: { category?: string; title: string; content: string }) =>
+      request<{ id: string }>("/api/v1/feedback", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    list: (category?: string, page = 1, pageSize = 20, status?: string) =>
+      request<{ items: Feedback[]; total: number }>(
+        `/api/v1/feedback?page=${page}&page_size=${pageSize}${
+          category ? `&category=${encodeURIComponent(category)}` : ""
+        }${status ? `&status=${encodeURIComponent(status)}` : ""}`,
+      ),
+    mine: () => request<Feedback[]>("/api/v1/feedback/mine"),
+    toggleLike: (id: string) =>
+      request<{ liked: boolean; like_count: number }>(`/api/v1/feedback/${id}/like`, {
+        method: "POST",
+      }),
+    adminUpdate: (id: string, payload: { status?: string; admin_reply?: string }) =>
+      request<{ id: string; status: string }>(`/api/v1/feedback/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  corpus: {
+    getConsent: () => request<{ allow_corpus: boolean }>("/api/v1/corpus/consent"),
+    setConsent: (allow: boolean) =>
+      request<{ allow_corpus: boolean }>("/api/v1/corpus/consent", {
+        method: "POST",
+        body: JSON.stringify({ allow }),
+      }),
   },
 };

@@ -39,6 +39,7 @@ def init_db():
         columns = {column["name"] for column in inspector.get_columns("users")}
         for column in (
             "hashed_password",
+            "email",
             "llm_provider",
             "llm_base_url",
             "llm_model",
@@ -50,7 +51,11 @@ def init_db():
                 continue
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {column} VARCHAR"))
+        # allow_corpus 是布尔列，需用 BOOLEAN 补（VARCHAR 会让 '0' 被误读为 True）
+        if "allow_corpus" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN allow_corpus BOOLEAN DEFAULT false"))
         with engine.begin() as conn:
             conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
         with engine.begin() as conn:
-            conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))
+            conn.execute(text("UPDATE users SET is_active = true WHERE is_active IS NULL"))

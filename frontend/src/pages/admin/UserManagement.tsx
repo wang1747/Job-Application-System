@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { AdminUser } from "../../types";
-import { Card, PageHeader, EmptyState, Loading } from "../../components/ui";
+import { Card, EmptyState, Loading } from "../../components/ui";
 
 export default function UserManagement() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -61,43 +61,20 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6">
-      <PageHeader
-        title="用户管理"
-        subtitle="管理用户角色和账号状态"
-        icon={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
-        }
-        actions={
-          <button onClick={loadUsers} className="of-btn-ghost" disabled={loading}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6" />
-              <path d="M1 20v-6h6" />
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-            </svg>
-            刷新
-          </button>
-        }
-      />
-
+    <div>
       {/* 统计卡片 */}
-      <div className="mb-6 grid grid-cols-3 gap-3">
-        <div className="of-card p-3 text-center">
+      <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="of-card p-4 text-center">
           <p className="text-xs font-medium text-slate-500">总用户</p>
-          <p className="mt-0.5 text-xl font-bold text-slate-900">{users.length}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{users.length}</p>
         </div>
-        <div className="of-card p-3 text-center">
+        <div className="of-card p-4 text-center">
           <p className="text-xs font-medium text-slate-500">管理员</p>
-          <p className="mt-0.5 text-xl font-bold text-brand-600">{users.filter((u) => u.role === "admin").length}</p>
+          <p className="mt-1 text-2xl font-bold text-brand-600">{users.filter((u) => u.role === "admin").length}</p>
         </div>
-        <div className="of-card p-3 text-center">
+        <div className="of-card p-4 text-center">
           <p className="text-xs font-medium text-slate-500">已禁用</p>
-          <p className="mt-0.5 text-xl font-bold text-rose-500">{users.filter((u) => !u.is_active).length}</p>
+          <p className="mt-1 text-2xl font-bold text-rose-500">{users.filter((u) => !u.is_active).length}</p>
         </div>
       </div>
 
@@ -119,6 +96,18 @@ export default function UserManagement() {
         </div>
       )}
 
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm text-slate-500">共 {users.length} 个账号</span>
+        <button onClick={loadUsers} className="of-btn-ghost" disabled={loading}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 4v6h-6" />
+            <path d="M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          刷新
+        </button>
+      </div>
+
       <Card className="overflow-hidden p-0">
         {loading ? (
           <Loading text="加载用户列表..." />
@@ -131,7 +120,7 @@ export default function UserManagement() {
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-500">
-                  <th className="px-5 py-3 font-medium">用户名</th>
+                  <th className="px-5 py-3 font-medium">用户</th>
                   <th className="px-5 py-3 font-medium">角色</th>
                   <th className="px-5 py-3 font-medium">状态</th>
                   <th className="px-5 py-3 font-medium">注册时间</th>
@@ -150,7 +139,14 @@ export default function UserManagement() {
                         }`}>
                           {user.name.charAt(0).toUpperCase()}
                         </div>
-                        <span className="font-medium text-slate-900">{user.name}</span>
+                        <div className="min-w-0">
+                          <span className="block font-medium text-slate-900">{user.name}</span>
+                          {user.email && (
+                            <span className="block truncate text-xs text-slate-400">
+                              {user.email}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">

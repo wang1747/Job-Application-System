@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.agents.tools.ats_checker import check_ats_compatibility
 from app.core.text_utils import extract_skills
+from app.models.application import Application
 from app.models.jd import JobDescription
+from app.models.match import MatchResult
 from app.models.resume import Resume
 from app.models.user import User
 from app.modules.resume.optimizer import (
@@ -169,6 +171,7 @@ def save_optimized_version(
     added_keywords: list,
     db: Session,
     user_id: str,
+    structured: Optional[dict] = None,
 ) -> Resume:
     """把优化结果保存为简历新版本，并记录目标 JD 信息。"""
     source = db.query(Resume).filter(
@@ -183,19 +186,72 @@ def save_optimized_version(
     ).order_by(Resume.version.desc()).first()
     next_version = (latest.version + 1) if latest else 1
 
+    parsed_json = {
+        "kind": "optimized",
+        "parent_id": resume_id,
+        "changes": changes or [],
+        "target_jd": target_jd or {},
+        "added_keywords": added_keywords or [],
+        "skills": sorted(extract_skills(optimized_text or "")),
+    }
+    # 结构化数据（用于导出保留层次），提取失败则跳过
+    if structured:
+        parsed_json["structured"] = structured
+
     resume = Resume(
         user_id=user_id,
         version=next_version,
         raw_text=optimized_text,
-        parsed_json={
-            "kind": "optimized",
-            "parent_id": resume_id,
-            "changes": changes or [],
-            "target_jd": target_jd or {},
-            "added_keywords": added_keywords or [],
-            "skills": sorted(extract_skills(optimized_text or "")),
-        },
+        parsed_json=parsed_json,
         source_file=source.source_file,
+    )
+    db.add(resume)
+    db.commit()
+    db.refresh(resume)
+    return resume
+
+
+def rollback_to_version(
+    resume_id: str,
+    target_version_id: str,
+    db: Session,
+    user_id: str,
+) -> Resume:
+    """把指定旧版本恢复为当前最新版本（对标标书模板的 rollbackToRevision）。
+
+    回滚 = 复制目标版本内容，创建一条新的最新版本（version 递增、历史保留）。
+    """
+    source = db.query(Resume).filter(
+        Resume.id == resume_id,
+        Resume.user_id == user_id,
+    ).first()
+    target = db.query(Resume).filter(
+        Resume.id == target_version_id,
+        Resume.user_id == user_id,
+    ).first()
+    if not source or not target:
+        raise ValueError("简历不存在")
+
+    # 必须属于同一份简历（同一 root 文档）
+    all_resumes = db.query(Resume).filter(Resume.user_id == user_id).all()
+    by_id = {r.id: r for r in all_resumes}
+    if _root_document_id(source, by_id) != _root_document_id(target, by_id):
+        raise ValueError("所选版本不属于同一份简历")
+
+    latest = db.query(Resume).filter(
+        Resume.user_id == user_id
+    ).order_by(Resume.version.desc()).first()
+    next_version = (latest.version + 1) if latest else 1
+
+    parsed_json = dict(target.parsed_json or {})
+    parsed_json["rolled_back_from"] = target.version
+
+    resume = Resume(
+        user_id=user_id,
+        version=next_version,
+        raw_text=target.raw_text,
+        parsed_json=parsed_json,
+        source_file=target.source_file,
     )
     db.add(resume)
     db.commit()
@@ -246,6 +302,14 @@ async def optimize_resume_flow(
 
     new_version = None
     if result.optimized_text and result.optimized_text.strip():
+        # 结构化提取（供导出保留层次），失败不阻塞优化主流程
+        structured = None
+        try:
+            from app.modules.resume.optimizer.structure_extract import extract_structured
+            structured = extract_structured(result.optimized_text, user)
+        except Exception as e:
+            logger.warning("优化结果结构化提取失败: %s", e)
+
         new_version = save_optimized_version(
             resume_id,
             result.optimized_text,
@@ -254,6 +318,7 @@ async def optimize_resume_flow(
             result.added_keywords,
             db,
             user.id,
+            structured=structured,
         )
 
     return {
@@ -276,6 +341,7 @@ async def optimize_resume_flow(
                 "passed": result.preservation.passed,
                 "fallback": result.preservation.fallback,
                 "missing_facts": result.preservation.missing_facts,
+                "critical_facts": result.preservation.critical_facts,
             },
             "edits_applied": result.edit_count,
             "ats": check_ats_compatibility(resume.raw_text, requirement.raw_text),
@@ -287,3 +353,59 @@ async def optimize_resume_flow(
         },
         "error": None,
     }
+
+
+def delete_resume(resume_id: str, db: Session, user_id: str) -> int:
+    """删除指定简历（仅限当前用户），返回删除条数。级联清理关联的匹配结果与投递引用。"""
+    # 级联清理：删除关联的匹配结果，投递记录解除简历关联
+    db.query(MatchResult).filter(
+        MatchResult.resume_id == resume_id
+    ).delete(synchronize_session=False)
+    db.query(Application).filter(
+        Application.resume_id == resume_id,
+        Application.user_id == user_id,
+    ).update({"resume_id": None}, synchronize_session=False)
+    deleted = db.query(Resume).filter(
+        Resume.id == resume_id,
+        Resume.user_id == user_id,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return deleted
+
+
+def delete_all_resumes(db: Session, user_id: str) -> int:
+    """删除当前用户的全部简历，返回删除条数。级联清理关联的匹配结果与投递引用。"""
+    resume_ids = [r.id for r in db.query(Resume).filter(
+        Resume.user_id == user_id
+    ).all()]
+    if resume_ids:
+        db.query(MatchResult).filter(
+            MatchResult.resume_id.in_(resume_ids)
+        ).delete(synchronize_session=False)
+        db.query(Application).filter(
+            Application.resume_id.in_(resume_ids),
+            Application.user_id == user_id,
+        ).update({"resume_id": None}, synchronize_session=False)
+    deleted = db.query(Resume).filter(
+        Resume.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return deleted
+
+
+def export_resume_data(db: Session, user_id: str) -> list:
+    """导出当前用户的全部简历数据（JSON 结构，供下载）。"""
+    resumes = db.query(Resume).filter(
+        Resume.user_id == user_id
+    ).order_by(Resume.version.asc()).all()
+    return [
+        {
+            "id": r.id,
+            "version": r.version,
+            "raw_text": r.raw_text,
+            "source_file": r.source_file,
+            "parsed_json": r.parsed_json,
+            "created_at": r.created_at,
+        }
+        for r in resumes
+    ]

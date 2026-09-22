@@ -20,10 +20,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # 生产环境不暴露 5432 到公网，仅容器间可见
-    # 如需本地调试可临时打开下行：
-    # ports:
-    #   - "127.0.0.1:5432:5432"
+    # 仅监听本机回环，供 SSH 隧道安全访问（不暴露公网）
+    ports:
+      - "127.0.0.1:5432:5432"
 
   # -------------------- 后端 --------------------
   backend:
@@ -53,6 +52,8 @@ services:
       - REMINDER_WEBHOOK_URL=${REMINDER_WEBHOOK_URL:-}
       - REMINDER_CHECK_INTERVAL_MINUTES=${REMINDER_CHECK_INTERVAL_MINUTES:-60}
       - REMINDER_SERVICE_TOKEN=${REMINDER_SERVICE_TOKEN:?Change reminder token}
+      # 薪资基准：0 = 禁用 LLM 自动刷新（数据改为定期联网采集真实行情，避免模型编数字污染）
+      - SALARY_BENCHMARK_REFRESH_DAYS=${SALARY_BENCHMARK_REFRESH_DAYS:-0}
     volumes:
       - chroma-data:/app/chroma_db
       - upload-data:/app/uploads
@@ -85,6 +86,8 @@ services:
       # 自签 / Let's Encrypt 证书挂载点（可选）
       - ./deploy/certs:/etc/nginx/certs:ro
       - ./deploy/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      # 静态下载物（桌面版安装包等），访问 /downloads/xxx
+      - ./downloads:/usr/share/nginx/html/downloads:ro
     logging:
       driver: json-file
       options:

@@ -29,14 +29,13 @@ from app.modules.interview.services import (
     submit_interview_answer,
     get_interview_summary,
     get_interview_session,
+    finish_interview_session,
 )
 from app.agents.graphs.interview_prep import generate_interview_questions
 from app.agents.tools.document_parser import parse_article_file
 from app.modules.jd.ocr_service import extract_text_from_image_file
 from app.modules.auth.routes import get_current_user_required
 from app.models.user import User
-
-from app.modules.jd.ocr_service import extract_text_from_image_file
 
 logger = logging.getLogger(__name__)
 
@@ -247,63 +246,6 @@ async def upload_article_ocr(
         "error": None,
     }
 
-@router.post(
-    "/articles/ocr",
-    summary="通过截图 OCR 导入面经",
-    description="上传面经截图，自动识别文字内容并导入"
-)
-async def ocr_import_article(
-    file: UploadFile = File(...),
-    company: str = File(...),
-    position: Optional[str] = File(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_required)
-):
-    """通过截图 OCR 导入面经"""
-    content = await file.read()
-    
-    try:
-        raw_content = extract_text_from_image_file(content, file.filename)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    
-    if not raw_content or len(raw_content.strip()) < 10:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OCR 识别结果为空，请确保图片清晰包含文字"
-        )
-    
-    article, duplicate = import_article(
-        company=company,
-        position=position,
-        raw_content=raw_content,
-        source="ocr",
-        db=db,
-        user_id=current_user.id
-    )
-    
-    metadata = extract_article_metadata(raw_content, user=current_user)
-    article.questions = metadata["questions"]
-    article.tags = metadata["tags"]
-    article.difficulty = metadata["difficulty"]
-    db.commit()
-    db.refresh(article)
-    saved = extract_questions_from_article(article.id, db, current_user.id) if metadata["questions"] else []
-    
-    logger.info(f"用户 {current_user.id} 通过 OCR 导入面经: {file.filename}, article={article.id}")
-    
-    return {
-        "success": True,
-        "data": {
-            "id": article.id,
-            "duplicate": duplicate,
-            "filename": file.filename,
-            "ocr_text": raw_content[:500] + ("..." if len(raw_content) > 500 else ""),
-            "question_count": len(saved),
-        },
-        "error": None,
-    }
-
 @router.get(
     "/articles",
     summary="获取面经列表",
@@ -406,7 +348,7 @@ async def generate_questions_endpoint(
     # 获取 JD
     jd = _get_resource_or_404(JobDescription, req.jd_id, current_user.id, db, "JD")
     if not jd.raw_text or not jd.raw_text.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="JD内容为空")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="岗位要求内容为空")
 
     # 获取面经（可选）
     article_content = ""
@@ -522,6 +464,21 @@ async def submit_answer_endpoint(
         },
         "error": None
     }
+
+
+@router.post(
+    "/simulate/{session_id}/finish",
+    summary="提前结束模拟面试",
+    description="用户主动结束模拟面试，之后可获取总结",
+)
+async def finish_simulate(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    if not finish_interview_session(session_id, db, current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    return {"success": True, "data": None, "error": None}
 
 
 @router.get(

@@ -1,32 +1,34 @@
 # OfferFlow 求职全流程智能 Agent 系统
 
-> 一个把 JD 解析、简历优化、匹配分析、模拟面试、投递追踪、模型设置和外部提醒串成完整闭环的求职助手。
-> 基于 FastAPI + LangGraph + ChromaDB + React 构建，支持用户自带 API Key（BYOK），可 Docker 一键部署。
+> 一个把简历生成、职位要求分析、简历优化、岗位匹配、面试准备、薪资谈判、投递追踪串成完整闭环的求职助手。
+> 基于 FastAPI + LangGraph + ChromaDB + React 构建，支持用户自带 API Key（BYOK），可 Docker 一键部署。界面面向零基础应届生设计，全中文、无术语门槛。
 
 ## 项目简介
 
 OfferFlow 面向秋招、社招和日常求职场景，帮助用户从“看到职位”到“拿到 Offer”：
 
-1. 粘贴 JD 或上传截图，AI 自动解析公司和岗位要求。
-2. 选择 JD 与简历，系统给出匹配度、技能差距和投递建议。
-3. 针对目标 JD 优化简历，并支持导出 PDF / Word。
-4. 导入面经，基于简历、JD 和面经生成面试题，并进行模拟面试。
-5. 使用看板追踪每份投递，自动提醒逾期未跟进和即将面试。
+1. 没有简历？填写学校和经历，AI 自动生成一份一页内、匹配岗位的中文简历（覆盖 15 个求职方向、19 个行业范文参考）。
+2. 粘贴职位要求或上传截图，AI 自动解析公司和岗位要求。
+3. 选择简历和岗位，系统给出匹配度、技能差距和投递建议。
+4. 针对目标岗位优化简历（事实保真校验、绝不编造），支持导出中文 PDF / Word。
+5. 导入面试经验，生成面试题（带参考答案），进行模拟面试（可提前结束）。
+6. 先测测你的市场薪资（参考 2026 届应届生起薪行情），再和 AI 扮演的 HR 实战演练薪资谈判，每轮有教练点评。
+7. 使用看板追踪每份投递，自动提醒逾期未跟进和即将面试。
 
 ## 核心功能
 
 - 注册、登录、JWT 鉴权、用户数据隔离。
 - 管理员用户管理：角色分配、启用/禁用账号。
 - 模型设置：支持 DeepSeek、OpenAI、Moonshot 等模型，用户可配置自己的 API Key。
-- JD 智能解析：提取公司、职位、硬性要求、技术栈、隐藏信号。
-- JD 与面经截图 OCR：支持 PNG / JPG / JPEG / BMP / WEBP 图片文字识别。
-- 简历匹配：本地技能词典 + ChromaDB 语义检索混合评分。
-- 简历优化：针对目标 JD 重写简历，输出 ATS 对比和版本历史。
-- 简历导出：PDF / Word 一键下载。
-- 面试准备：面经导入、面试题生成、多轮模拟面试。
-- 投递追踪：看板状态流转、事件时间线、统计图表。
-- 批量 JD 匹配：一次粘贴多条 JD，自动解析并排序。
-- 主动提醒：定时检查投递进度，通过 Webhook 推送，兼容 n8n。
+- 简历生成：结构化卡片式输入，AI 生成一页内、字数达标（约 800 字）的中文简历，按 15 个求职方向提供示例/推荐技能，参考 19 个行业的真实范文，逐段重生成给多候选，事实保真校验（不编造）。
+- 职位要求分析：提取公司、职位、硬性要求、技术栈、隐藏信号；支持截图 OCR。
+- 岗位匹配：本地技能词典 + 真实 JD 词频 + ChromaDB 语义检索混合评分，支持批量匹配。
+- 简历优化：针对目标岗位做差距分析 + 整份重写，一页约束（三刀裁剪：删废话/并同类/强重点），事实保真硬校验（关键信息绝不丢失），输出优化前后评分和逐行 diff。
+- 简历导出：中文 PDF / Word 一键下载（PDF 用文泉驿 TrueType 字体，Docker 容器内无乱码）。
+- 面试准备：面试经验库（文本/文件/截图 OCR 导入）、面试题生成（带参考答案）、多轮模拟面试（可提前结束）、个人题库导入。
+- 薪资：先根据简历估市场价（学历 × 岗位方向 × 城市，参考 2026 届应届生起薪行情，数字由规则计算不靠 AI 编造），再 AI 扮演 HR 实战压价，4 个场景，每轮实时教练点评，5 轮后出总结。市场基准数据落库版本化，支持定期自动刷新与手动刷新（旧版本保留可回滚）。
+- 投递追踪：看板状态流转、事件时间线、统计图表、主动提醒（Webhook / n8n）。
+- 数据管理：一键导出全部数据（JSON）、单条/全部删除（级联清理，不留孤儿数据）。
 
 ## 技术栈
 
@@ -64,16 +66,18 @@ graph TB
 
 ```text
 backend/app/modules/
-├── auth/              # 登录注册
-├── jd/                # JD 解析与 OCR
-├── resume/            # 简历优化与导出
-├── match/             # 匹配分析
-├── interview/         # 面试准备
-├── application/       # 投递追踪
-├── model_config/      # BYOK 模型设置
-├── permissions/       # 角色与资源权限
-├── database/          # 数据库统一入口
-└── vector_store/      # 向量库统一入口
+├── auth/                  # 登录注册
+├── jd/                    # 职位要求解析与 OCR
+├── resume/                # 简历优化与导出
+├── resume_generation/     # 简历生成（结构化 + 范文 + 字数约束）
+├── match/                 # 岗位匹配
+├── interview/             # 面试准备（面经/题目/模拟面试）
+├── salary_negotiation/    # 薪资谈判演练
+├── application/           # 投递追踪
+├── model_config/          # BYOK 模型设置
+├── permissions/           # 角色与资源权限
+├── database/              # 数据库统一入口
+└── vector_store/          # 向量库统一入口
 ```
 
 ## 快速开始（本地开发）
@@ -251,9 +255,15 @@ python scripts/backup_db.py
 | `POST` | `/api/v1/interview/articles/ocr` | OCR 识别并导入面经 |
 | `POST` | `/api/v1/match` | 计算匹配度 |
 | `POST` | `/api/v1/match/batch` | 批量匹配 JD |
+| `POST` | `/api/v1/resume-generation/generate` | 生成简历 |
+| `POST` | `/api/v1/resume-generation/regenerate-section-variants` | 逐段重生成（多候选） |
 | `POST` | `/api/v1/resume/optimize` | 优化简历 |
 | `GET` | `/api/v1/resume/{id}/export` | 导出简历 |
 | `POST` | `/api/v1/interview/simulate/start` | 开始模拟面试 |
+| `POST` | `/api/v1/interview/simulate/{id}/finish` | 提前结束模拟面试 |
+| `POST` | `/api/v1/salary-negotiation/start` | 开始薪资谈判 |
+| `POST` | `/api/v1/salary-negotiation/reference` | 薪资参考（根据简历估市场价） |
+| `POST` | `/api/v1/salary-negotiation/{id}/answer` | 提交谈判回应 |
 | `GET` | `/api/v1/applications/reminders` | 获取提醒 |
 | `GET` | `/api/v1/applications/reminders/export` | n8n 提醒导出接口 |
 
@@ -261,9 +271,11 @@ python scripts/backup_db.py
 
 ## 简历亮点
 
-- 基于 FastAPI + LangGraph + React 构建求职全流程 Agent，覆盖 JD 解析、语义匹配、简历优化、模拟面试、投递看板。
-- 实现注册登录、用户数据隔离、BYOK 模型设置、CI 和一键 Docker 部署。
-- 使用 ChromaDB 做本地语义检索，LangGraph 编排多 Agent 工作流，支持 OCR、批量匹配和外部提醒。
+- 基于 FastAPI + LangGraph + React 构建求职全流程 Agent，覆盖简历生成、职位要求分析、语义匹配、简历优化、面试准备、薪资谈判、投递看板。
+- 核心差异化：简历生成/优化/面试题参考答案均有「事实保真」硬校验（关键信息绝不丢失、不编造）；一页约束用「三刀裁剪」做内容取舍而非压缩字号；薪资谈判用「实时教练点评」指出用户接受了对方的框架。
+- 结构化简历生成：15 个求职方向模板 + 19 个行业真实范文 few-shot + 字数约束（800±100）+ 逐段重生成给多候选。
+- 面试题生成带「能脱稿讲」的参考答案，并按真实 JD 词频增强 ATS 技能识别。
+- 实现注册登录、用户数据隔离、BYOK 模型设置、CI 和一键 Docker 部署，界面全中文、面向零基础应届生。
 
 ## 已知限制
 

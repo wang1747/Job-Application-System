@@ -87,7 +87,7 @@ async def delete_jd_route(
     current_user: User = Depends(get_current_user_required)
 ):
     if not delete_jd(jd_id, db, user_id=current_user.id):
-        raise HTTPException(status_code=404, detail="JD does not exist")
+        raise HTTPException(status_code=404, detail="职位不存在")
     return {"success": True, "data": None, "error": None}
 
 
@@ -108,7 +108,7 @@ async def update_jd_route(
         position=req.position,
     )
     if not jd:
-        raise HTTPException(status_code=404, detail="JD does not exist")
+        raise HTTPException(status_code=404, detail="职位不存在")
     return {
         "success": True,
         "data": {"id": jd.id, "company": jd.company, "position": jd.position},

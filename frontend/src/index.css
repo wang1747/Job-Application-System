@@ -63,13 +63,23 @@ button, input, textarea, select {
   .of-btn-danger {
     @apply of-btn bg-rose-50 text-rose-600 hover:bg-rose-100;
   }
+  /* 按钮内图标固定为 1em（跟随字号），避免 svg 的 h-full/w-full 在 flex 中异常撑大按钮 */
+  .of-btn > svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+  }
 
   /* ---- Input ---- */
   .of-input {
     @apply h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-50;
   }
   .of-select {
-    @apply of-input cursor-pointer pr-8;
+    @apply of-input cursor-pointer pr-8 appearance-none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 0.875rem;
   }
   .of-textarea {
     @apply w-full rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-50;
@@ -101,3 +111,36 @@ button, input, textarea, select {
     @apply flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-6 py-12 text-center;
   }
 }
+
+/* ===================== 深色模式覆盖 ===================== */
+.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+.dark .bg-white { background-color: #1e293b; }
+.dark .bg-white\/95 { background-color: rgba(30, 41, 59, 0.95); }
+.dark .bg-slate-50 { background-color: #0f172a; }
+.dark .bg-slate-50\/80 { background-color: rgba(15, 23, 42, 0.8); }
+.dark .bg-slate-50\/50 { background-color: rgba(15, 23, 42, 0.5); }
+.dark .bg-slate-100 { background-color: #334155; }
+.dark .bg-slate-200 { background-color: #334155; }
+.dark .text-slate-900 { color: #f1f5f9; }
+.dark .text-slate-800 { color: #e2e8f0; }
+.dark .text-slate-700 { color: #cbd5e1; }
+.dark .text-slate-600 { color: #cbd5e1; }
+.dark .text-slate-500 { color: #94a3b8; }
+.dark .text-slate-400 { color: #64748b; }
+.dark .border-slate-200 { border-color: #334155; }
+.dark .border-slate-100 { border-color: #1e293b; }
+.dark .divide-slate-50 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
+.dark .hover\:bg-slate-50:hover { background-color: #1e293b; }
+.dark .hover\:bg-slate-50\/50:hover { background-color: rgba(30, 41, 59, 0.5); }
+.dark .hover\:bg-slate-100:hover { background-color: #334155; }
+.dark .hover\:text-slate-900:hover { color: #f1f5f9; }
+.dark .bg-brand-50 { background-color: rgba(99, 102, 241, 0.16); }
+.dark .text-brand-600 { color: #818cf8; }
+.dark .text-brand-700 { color: #a5b4fc; }
+.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12); }
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12); }

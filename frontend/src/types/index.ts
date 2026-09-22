@@ -9,6 +9,7 @@ export interface ApiResponse<T> {
 export interface User {
   id: string;
   name: string;
+  email?: string;
   role?: string;
   is_active?: boolean;
   created_at: string;
@@ -17,6 +18,7 @@ export interface User {
 export interface AdminUser {
   id: string;
   name: string;
+  email?: string;
   role: string;
   is_active: boolean;
   created_at: string;
@@ -69,6 +71,7 @@ export interface ResumeItem {
     parent_id?: string;
     target_jd?: { id?: string | null; company?: string; position?: string };
     added_keywords?: string[];
+    generation?: ResumeGenerationResult;
   } | null;
   created_at?: string;
   version_count?: number;
@@ -110,9 +113,84 @@ export interface OptimizeResult {
     passed: boolean;
     fallback: boolean;
     missing_facts: string[];
+    critical_facts?: Record<string, number>;
   };
   edits_applied?: number;
   new_version: { id: string; version: number } | null;
+}
+
+export interface ResumeGenerationContact {
+  phone?: string;
+  email?: string;
+  github?: string;
+}
+
+export interface ResumeGenerationEducation {
+  school: string;
+  major: string;
+  degree: string;
+  start: string;
+  end: string;
+  courses?: string;
+  gpa?: string;
+  honors?: string;
+  detail?: string;
+}
+
+export interface ResumeGenerationExperience {
+  type: "project" | "internship" | "work";
+  name: string;
+  role: string;
+  start: string;
+  end: string;
+  bullets: string[];
+}
+
+export interface ResumeGenerationResult {
+  id: string;
+  version: number;
+  resume_text: string;
+  name: string;
+  position: string;
+  contact: ResumeGenerationContact;
+  summary: string;
+  education: ResumeGenerationEducation[];
+  experiences: ResumeGenerationExperience[];
+  skills: string[];
+  certifications: string[];
+  sections: string[];
+  tips: string[];
+  risks?: Array<{
+    section: string;
+    level: string;
+    issue: string;
+    suggestion: string;
+  }>;
+  jd_alignment?: Array<{
+    exp: number;
+    keywords: string[];
+  }>;
+  reference_source?: string;
+  ats: AtsResult;
+  gap: {
+    matched: string[];
+    missing: string[];
+    partial: string[];
+  };
+  fidelity?: {
+    passed: boolean;
+    added_skills: string[];
+    added_certifications: string[];
+    added_contacts: string[];
+    added_schools: string[];
+    added_companies: string[];
+  };
+}
+
+export interface RecommendSkillsResult {
+  direction?: string;
+  skills?: string[];
+  directions?: Record<string, string[]>;
 }
 
 // ===== 匹配 =====
@@ -219,6 +297,8 @@ export interface GeneratedQuestion {
   question: string;
   category: string;
   difficulty: string;
+  answer?: string;
+  suspicious_numbers?: string[];
 }
 
 export interface SimulateSession {
@@ -232,6 +312,72 @@ export interface SimulateAnswer {
   next_question: string | null;
   is_finished: boolean;
   question_number: number;
+}
+
+// ===== 薪资谈判 =====
+export interface NegotiationStart {
+  session_id: string;
+  hr_message: string;
+  round_count: number;
+}
+
+export interface NegotiationAnswer {
+  coaching: string;
+  next_hr_message: string | null;
+  is_finished: boolean;
+  round_count: number;
+}
+
+export interface NegotiationMessage {
+  role: "hr" | "user";
+  content: string;
+}
+
+export interface NegotiationCoaching {
+  hr: string;
+  answer: string;
+  coaching: string;
+}
+
+export interface NegotiationSummary {
+  summary: string;
+  round_count: number;
+  messages: NegotiationMessage[];
+  coaching: NegotiationCoaching[];
+  status: string;
+  scenario: string;
+  target_salary: string | null;
+  bottom_salary: string | null;
+}
+
+export interface SalaryReference {
+  salary_range: { low: number; high: number };
+  suggest_ask: number;
+  suggest_target: number;
+  suggest_bottom: number;
+  degree: string;
+  school_tier: string;
+  direction: string;
+  position: string;
+  city: string;
+  city_tier: string;
+  highlights: string[];
+  analysis: string;
+  market_basis: string;
+  sources: string[];
+  data_version: number;
+  data_year: string;
+  data_source: string;
+  data_updated_at: string | null;
+  caveats: string[];
+}
+
+export interface SalaryBenchmarkInfo {
+  version: number;
+  data_year: string;
+  source: string;
+  note: string;
+  updated_at: string | null;
 }
 
 // ===== 模型设置（BYOK） =====
@@ -299,4 +445,43 @@ export interface CostSummary {
   trace_count: number;
   by_operation: OperationCost[];
   by_model: ModelCost[];
+}
+
+export interface CommunityPost {
+  id: string;
+  user_id: string;
+  author: string;
+  title: string;
+  content: string;
+  category: string;
+  tags: string[];
+  like_count: number;
+  comment_count: number;
+  created_at: string;
+}
+
+export interface CommunityComment {
+  id: string;
+  user_id: string;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
+export interface CommunityPostDetail extends CommunityPost {
+  comments: CommunityComment[];
+}
+
+export interface Feedback {
+  id: string;
+  user_id: string;
+  author: string;
+  category: string;
+  title: string;
+  content: string;
+  status: string;
+  admin_reply: string | null;
+  like_count: number;
+  created_at: string;
+  updated_at: string;
 }

@@ -51,7 +51,11 @@ def embed_text(text: str) -> Optional[List[float]]:
         # bge-small-zh 的 tokenizer 是 cased（大小写敏感），词表只含小写英文词，
         # 必须先 lower，否则 Python/FastAPI/Kubernetes 等大写技术词全被映射成 [UNK]
         lowered = (text or "").lower()
-        return list(next(model.embed([lowered])))
+        vec = next(model.embed([lowered]))
+        # fastembed 返回 numpy 数组，元素是 np.float32；ChromaDB upsert 只接受
+        # Python 原生 float，必须显式转成原生 float 列表，否则报
+        # "Expected embeddings to be a list of floats or ints" 导致语义匹配回退
+        return [float(x) for x in vec]
     except Exception:
         return None
 

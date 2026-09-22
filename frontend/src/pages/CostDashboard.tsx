@@ -15,6 +15,19 @@ const OPERATION_LABELS: Record<string, string> = {
   mock_interview_question: "面试提问",
   mock_interview_feedback: "面试反馈",
   article_extract: "面经解析",
+  resume_generate: "简历生成",
+  resume_generate_retry: "简历生成重试",
+  resume_condense: "简历精简",
+  resume_generate_condense: "简历生成精简",
+  resume_optimize_extract: "简历优化提取",
+  resume_regenerate_section: "简历逐段重写",
+  resume_regenerate_variants: "简历改写候选",
+  salary_reference_extract: "薪资画像提取",
+  salary_reference_analysis: "薪资解读",
+  negotiation_hr: "谈判 HR",
+  negotiation_coach: "谈判教练",
+  negotiation_summary: "谈判总结",
+  salary_benchmark_refresh: "薪资基准刷新",
 };
 
 const OPERATION_COLORS: Record<string, string> = {
@@ -25,6 +38,19 @@ const OPERATION_COLORS: Record<string, string> = {
   mock_interview_question: "#3b82f6",
   mock_interview_feedback: "#f59e0b",
   article_extract: "#f97316",
+  resume_generate: "#6366f1",
+  resume_generate_retry: "#818cf8",
+  resume_condense: "#a78bfa",
+  resume_generate_condense: "#c084fc",
+  resume_optimize_extract: "#d946ef",
+  resume_regenerate_section: "#ec4899",
+  resume_regenerate_variants: "#f43f5e",
+  salary_reference_extract: "#0ea5e9",
+  salary_reference_analysis: "#10b981",
+  negotiation_hr: "#eab308",
+  negotiation_coach: "#ef4444",
+  negotiation_summary: "#64748b",
+  salary_benchmark_refresh: "#22c55e",
 };
 
 const MODEL_COLORS = ["#4f46e5", "#8b5cf6", "#06b6d4", "#14b8a6", "#f59e0b", "#ef4444", "#3b82f6"];
@@ -93,7 +119,7 @@ function HeroStat({
 function CardHeader({ icon, title, desc, gradient }: { icon: ReactNode; title: string; desc: string; gradient: string }) {
   return (
     <div className="mb-5 flex items-center gap-3">
-      <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${gradient} text-white shadow-md`}>
+      <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br ${gradient} text-white shadow-md [&>svg]:h-full [&>svg]:w-full`}>
         {icon}
       </div>
       <div>

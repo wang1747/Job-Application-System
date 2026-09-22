@@ -21,6 +21,7 @@ class FakeLLM:
 
     def invoke(self, messages):
         content = "\n".join(getattr(m, "content", "") or "" for m in messages)
+        human_content = getattr(messages[-1], "content", "") if messages else ""
         if "JD parser" in content:
             payload = {
                 "company": "ByteDance",
@@ -36,7 +37,6 @@ class FakeLLM:
                 "hidden_signals": ["团队扩张快"],
             }
         elif "简历优化专家" in content:
-            # 提取【原始简历】原文，返回「无改动」的整份重写结果（确定性、离线）
             m = re.search(
                 r"【原始简历】\n(.*?)\n\n【目标岗位结构化需求】",
                 content,
@@ -49,6 +49,47 @@ class FakeLLM:
                 "added_keywords": [],
                 "removed_keywords": [],
             }
+        elif "资深简历撰写专家" in content:
+            payload = {
+                "name": "张三",
+                "position": "Python 后端实习",
+                "contact": {
+                    "phone": "13800138000",
+                    "email": "zhangsan@example.com",
+                    "github": "",
+                },
+                "summary": "数据科学与大数据技术专业，具备 Python 后端开发能力。",
+                "education": [
+                    {
+                        "school": "河北环境工程学院",
+                        "major": "数据科学与大数据技术",
+                        "degree": "本科",
+                        "start": "2023-09",
+                        "end": "2027-06",
+                        "detail": "",
+                    }
+                ],
+                "experiences": [
+                    {
+                        "type": "project",
+                        "name": "OfferFlow 求职系统",
+                        "role": "后端开发",
+                        "start": "2026-03",
+                        "end": "2026-08",
+                        "bullets": ["使用 FastAPI 搭建后端，支撑日均 1000 次调用"],
+                    }
+                ],
+                "skills": ["Python", "FastAPI"],
+                "certifications": [],
+                "tips": ["补充量化成果"],
+            }
+        elif "请只重新生成" in content:
+            try:
+                current = json.loads(human_content).get("current") or {}
+            except Exception:
+                current = {}
+            payload = dict(current)
+            payload["tips"] = list(payload.get("tips") or []) + ["已重新生成"]
         elif "面试题生成专家" in content:
             payload = {
                 "questions": [
@@ -74,12 +115,14 @@ def _fake_llm(monkeypatch):
     import app.agents.graphs.mock_interview as mock_interview
     import app.modules.interview.services as interview_service
     import app.modules.resume.optimizer.service as optimizer_service
+    import app.modules.resume_generation.services as resume_generation_service
 
     monkeypatch.setattr(jd_analysis, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(optimizer_service, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(interview_prep, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(mock_interview, "get_user_llm_or_raise", lambda user: fake)
     monkeypatch.setattr(interview_service, "get_user_llm_or_raise", lambda user: fake)
+    monkeypatch.setattr(resume_generation_service, "get_user_llm_or_raise", lambda user: fake)
     return fake
 
 

@@ -1,4 +1,4 @@
-import { type FC } from "react";
+import { type FC, useState } from "react";
 import type { Application, ApplicationStatus } from "../types";
 import { STATUS_LABELS, STATUS_ORDER } from "../constants/application";
 
@@ -22,24 +22,64 @@ const COLUMN_COLORS: Record<string, string> = {
 };
 
 const KanbanBoard: FC<KanbanBoardProps> = ({ items, onStatusChange, onEdit, onDelete }) => {
+  const [dragApp, setDragApp] = useState<Application | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+
   const grouped = STATUS_ORDER.reduce((acc, status) => {
     acc[status] = items.filter((item) => item.status === status);
     return acc;
   }, {} as Record<string, Application[]>);
 
+  const handleDrop = (status: string) => {
+    if (dragApp && dragApp.status !== status) {
+      onStatusChange(dragApp, status as ApplicationStatus);
+    }
+    setDragApp(null);
+    setDragOver(null);
+  };
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-2 min-h-[400px]">
       {STATUS_ORDER.map((status) => {
         const cards = grouped[status] || [];
+        const isDragOver = dragOver === status;
         return (
-          <div key={status} className="min-w-[200px] flex-1">
+          <div
+            key={status}
+            className={`min-w-[200px] flex-1 rounded-xl transition-colors ${
+              isDragOver ? "bg-brand-50 ring-2 ring-brand-200" : ""
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (dragOver !== status) setDragOver(status);
+            }}
+            onDragLeave={(e) => {
+              // 只在真正离开列容器时清除高亮（避免子元素间移动误触发）
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOver((cur) => (cur === status ? null : cur));
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDrop(status);
+            }}
+          >
             <div className={`mb-2 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold ${COLUMN_COLORS[status] || "bg-slate-100 text-slate-600"}`}>
               <span>{STATUS_LABELS[status]}</span>
               <span className="rounded-full bg-white/60 px-2">{cards.length}</span>
             </div>
             <div className="flex flex-col gap-2">
               {cards.map((app) => (
-                <div key={app.id} className="of-card-hover p-3">
+                <div
+                  key={app.id}
+                  draggable
+                  onDragStart={() => setDragApp(app)}
+                  onDragEnd={() => {
+                    setDragApp(null);
+                    setDragOver(null);
+                  }}
+                  className={`of-card-hover p-3 ${dragApp?.id === app.id ? "opacity-50" : ""} cursor-grab active:cursor-grabbing`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-slate-900">{app.company}</div>

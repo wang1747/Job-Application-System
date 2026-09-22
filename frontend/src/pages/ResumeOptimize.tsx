@@ -1,24 +1,32 @@
 import { type ChangeEvent, type FC, useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import ResumeDiff from "../components/ResumeDiff";
 import type { JDItem, OptimizeResult, ResumeItem } from "../types";
 import { Card, PageHeader, SectionTitle, Badge, Icons } from "../components/ui";
+import { useStageProgress } from "../hooks/useStageProgress";
 
 type UploadMode = "file" | "text";
 type JdMode = "saved" | "paste";
 
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "手动输入",
+  optimized: "优化版本",
+  ai_generated: "AI 生成",
+};
+
 const resumeLabel = (item: ResumeItem) => {
-  const src = item.source_file;
-  const validSrc = src && src !== "manual" && src !== "optimized" ? src : "";
+  const src = item.source_file || "";
+  const base = SOURCE_LABELS[src] || src || "手动输入";
   if (item.parsed_json?.kind === "optimized") {
     const jd = item.parsed_json?.target_jd;
     const hasJd = !!(jd?.company || jd?.position);
     const target = hasJd
       ? `针对 ${jd!.company || ""}${jd!.company && jd!.position ? " · " : ""}${jd!.position || ""}`
-      : "未指定目标 JD";
-    return { base: validSrc || "优化版本", target };
+      : "未指定目标岗位";
+    return { base, target };
   }
-  return { base: validSrc || "手动输入", target: "" };
+  return { base, target: "" };
 };
 
 /** 把后端返回结果归一化，兼容旧后端/缺失字段，避免渲染时访问 undefined 导致白屏。 */
@@ -36,7 +44,7 @@ const normalizeResult = (d: OptimizeResult | null): OptimizeResult | null => {
     target_jd: d.target_jd ?? { id: null, company: "", position: "" },
     ats: d.ats ?? { score: 0, issues: [], suggestions: [] },
     ats_after: d.ats_after ?? { score: 0, issues: [], suggestions: [] },
-    preservation: d.preservation ?? { score: 1, passed: true, fallback: false, missing_facts: [] },
+    preservation: d.preservation ?? { score: 1, passed: true, fallback: false, missing_facts: [], critical_facts: {} },
     new_version: d.new_version ?? null,
   };
 };
@@ -56,14 +64,25 @@ const ResumeOptimize: FC = () => {
   const [result, setResult] = useState<OptimizeResult | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [versions, setVersions] = useState<ResumeItem[]>([]);
+  const [showVersions, setShowVersions] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
+
+  const optimizeStage = useStageProgress(
+    ["正在解析岗位要求…", "正在重写经历要点…", "正在对齐 JD 关键词…", "正在校验事实保真…"],
+    optimizing,
+  );
 
   const loadResumes = useCallback(async () => {
     try {
       const resp = await api.resume.list();
       if (resp.success && resp.data) {
         setResumes(resp.data);
+        // URL 参数（如从匹配页跳转）优先，其次保持当前选择，最后默认第一条
+        const urlResumeId = new URLSearchParams(window.location.search).get("resume_id") || "";
         setSelectedId((current) => {
           if (current && resp.data!.some((item) => item.id === current)) return current;
+          if (urlResumeId && resp.data!.some((item) => item.id === urlResumeId)) return urlResumeId;
           return resp.data![0]?.id || "";
         });
       }
@@ -78,8 +97,10 @@ const ResumeOptimize: FC = () => {
       if (resp.success && resp.data) {
         setJds(resp.data);
         // 自动选中第一个 JD，避免用户点「开始优化」时因未选 JD 被拦截而无响应
+        const urlJdId = new URLSearchParams(window.location.search).get("jd_id") || "";
         setSelectedJdId((current) => {
           if (current && resp.data!.some((item) => item.id === current)) return current;
+          if (urlJdId && resp.data!.some((item) => item.id === urlJdId)) return urlJdId;
           return resp.data![0]?.id || "";
         });
       }
@@ -120,8 +141,8 @@ const ResumeOptimize: FC = () => {
   const handleOptimize = async () => {
     setError(""); setMessage("");
     if (!selectedId) { setError("请先选择一份简历"); return; }
-    if (jdMode === "saved" && !selectedJdId) { setError("请选择一个目标 JD"); return; }
-    if (jdMode === "paste" && !jdText.trim()) { setError("请输入目标 JD 文本"); return; }
+    if (jdMode === "saved" && !selectedJdId) { setError("请选择一个目标岗位"); return; }
+    if (jdMode === "paste" && !jdText.trim()) { setError("请粘贴岗位的招聘要求"); return; }
 
     setOptimizing(true); setResult(null);
     try {
@@ -163,13 +184,49 @@ const ResumeOptimize: FC = () => {
     }
   };
 
+  const handleToggleVersions = async () => {
+    if (!selectedId) return;
+    if (showVersions) {
+      setShowVersions(false);
+      return;
+    }
+    setVersions([]);
+    try {
+      const res = await api.resume.versions(selectedId);
+      if (res.success && res.data) setVersions(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载版本失败");
+    }
+    setShowVersions(true);
+  };
+
+  const handleRollback = async (versionId: string) => {
+    if (!selectedId) return;
+    if (!window.confirm("确定恢复这个版本？会复制为新的最新版本，当前版本仍保留在历史中")) return;
+    setRollingBack(true);
+    try {
+      const res = await api.resume.rollback(selectedId, versionId);
+      if (res.success && res.data) {
+        setMessage(`已恢复该版本，作为最新版本 v${res.data.version}`);
+        setShowVersions(false);
+        await loadResumes();
+      } else {
+        setError(res.error || "恢复失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "恢复失败");
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
   const selectedResume = resumes.find((item) => item.id === selectedId);
 
   return (
     <div>
       <PageHeader
         title="简历优化"
-        subtitle="针对目标 JD 做关键词对齐与措辞升级，导出可直接投递的简历"
+        subtitle="针对目标岗位做关键词对齐与措辞升级，导出可直接投递的简历"
         icon={Icons.resume}
       />
 
@@ -238,7 +295,7 @@ const ResumeOptimize: FC = () => {
             <SectionTitle count={resumes.length}>选择简历</SectionTitle>
             {resumes.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
-                还没有简历，先上传一份吧
+                还没有简历？<Link to="/resume/generate" className="font-medium text-brand-600 hover:text-brand-700">去「简历生成」做一份</Link>
               </div>
             ) : (
               <div className="space-y-2">
@@ -288,6 +345,11 @@ const ResumeOptimize: FC = () => {
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-xs font-medium text-slate-500">当前选择的内容预览</span>
                 <div className="flex gap-2">
+                  {(selectedResume.version_count ?? 1) > 1 && (
+                    <button onClick={handleToggleVersions} className="of-btn-outline px-2.5 py-1 text-xs">
+                      {showVersions ? "收起版本" : "历史版本"}
+                    </button>
+                  )}
                   <button onClick={() => handleExport("pdf")} className="of-btn-outline px-2.5 py-1 text-xs">
                     {Icons.download} PDF
                   </button>
@@ -303,13 +365,51 @@ const ResumeOptimize: FC = () => {
               ) : (
                 <div className="text-xs text-rose-600">该版本未识别到内容，请重新上传可编辑文本的简历</div>
               )}
+              {showVersions && (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="mb-2 text-xs font-medium text-slate-500">历史版本（可恢复到任意旧版）</div>
+                  {versions.length === 0 ? (
+                    <div className="text-xs text-slate-400">加载中...</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {versions.map((v) => {
+                        const isLatest = v.version === selectedResume.version;
+                        const rolledFrom = (v.parsed_json as any)?.rolled_back_from;
+                        return (
+                          <div key={v.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-1.5">
+                            <div className="min-w-0 text-xs">
+                              <span className="font-medium text-slate-700">v{v.version}</span>
+                              <span className="ml-2 text-slate-400">
+                                {v.created_at ? new Date(v.created_at).toLocaleDateString() : ""}
+                                {v.parsed_json?.kind === "optimized" ? " · 优化版" : " · 原简历"}
+                                {rolledFrom ? ` · 回滚自 v${rolledFrom}` : ""}
+                              </span>
+                            </div>
+                            {isLatest ? (
+                              <Badge color="green">当前</Badge>
+                            ) : (
+                              <button
+                                onClick={() => handleRollback(v.id)}
+                                disabled={rollingBack}
+                                className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:text-slate-300"
+                              >
+                                恢复此版本
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </Card>
 
-        {/* ===== 右：目标 JD ===== */}
+        {/* ===== 右：目标岗位 ===== */}
         <Card className="p-5">
-          <SectionTitle>针对目标 JD 优化</SectionTitle>
+          <SectionTitle>针对目标岗位优化</SectionTitle>
 
           <div className="mb-3 flex rounded-lg bg-slate-100 p-1">
             <button
@@ -319,7 +419,7 @@ const ResumeOptimize: FC = () => {
                 jdMode === "saved" ? "bg-white text-brand-700 shadow-sm" : "text-slate-500"
               }`}
             >
-              从已保存 JD 选择
+              从已保存岗位选择
             </button>
             <button
               type="button"
@@ -328,7 +428,7 @@ const ResumeOptimize: FC = () => {
                 jdMode === "paste" ? "bg-white text-brand-700 shadow-sm" : "text-slate-500"
               }`}
             >
-              手动粘贴 JD
+              手动粘贴岗位要求
             </button>
           </div>
 
@@ -336,7 +436,7 @@ const ResumeOptimize: FC = () => {
             <>
               {jds.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
-                  还没有保存过 JD，请先在「JD 解析」页导入，或切换到「手动粘贴」
+                  还没有保存过职位，请先在「分析职位要求」页导入，或切换到「手动粘贴」
                 </div>
               ) : (
                 <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
@@ -373,27 +473,27 @@ const ResumeOptimize: FC = () => {
           ) : (
             <textarea
               className="of-textarea h-40"
-              placeholder="粘贴目标职位描述 (JD) 文本..."
+              placeholder="粘贴目标岗位的招聘要求..."
               value={jdText}
               onChange={(e) => setJdText(e.target.value)}
             />
           )}
 
-          {/* 当前目标 JD 提示 */}
+          {/* 当前目标岗位 提示 */}
           {(selectedJd || (jdMode === "paste" && jdText.trim())) && (
             <div className="mt-3 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">
               {Icons.check}
               <span>
                 {jdMode === "saved"
                   ? `将针对「${selectedJd?.company || "未知公司"} · ${selectedJd?.position || "未知职位"}」优化`
-                  : "将针对手动粘贴的 JD 优化"}
+                  : "将针对手动粘贴的岗位要求优化"}
               </span>
             </div>
           )}
 
           <button onClick={handleOptimize} disabled={optimizing || !selectedId} className="of-btn-primary mt-4">
             {optimizing ? (
-              <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />优化中...</>
+              <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />{optimizeStage}</>
             ) : <>{Icons.sparkle} 开始优化</>}
           </button>
         </Card>
@@ -412,36 +512,36 @@ const ResumeOptimize: FC = () => {
           </div>
 
           {result.length_warning && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {Icons.alert}
               <span>{result.length_warning}</span>
             </div>
           )}
 
           {/* 关键词差距 + ATS */}
-          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-xl bg-orange-50 p-4">
-              <div className="text-sm font-medium text-orange-800">优化前 ATS</div>
-              <div className="mt-1 text-3xl font-bold text-orange-700">{result.ats.score}</div>
+          <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-lg bg-orange-50 p-3">
+              <div className="text-xs font-medium text-orange-800">优化前评分</div>
+              <div className="mt-0.5 text-xl font-bold text-orange-700">{result.ats.score}</div>
               {result.ats.issues.map((issue) => (
                 <div key={issue} className="mt-1 text-xs text-orange-600">- {issue}</div>
               ))}
             </div>
-            <div className="rounded-xl bg-emerald-50 p-4">
-              <div className="text-sm font-medium text-emerald-800">优化后 ATS</div>
-              <div className="mt-1 text-3xl font-bold text-emerald-700">{result.ats_after.score}</div>
+            <div className="rounded-lg bg-emerald-50 p-3">
+              <div className="text-xs font-medium text-emerald-800">优化后评分</div>
+              <div className="mt-0.5 text-xl font-bold text-emerald-700">{result.ats_after.score}</div>
               {result.ats_after.suggestions.map((item) => (
                 <div key={item} className="mt-1 text-xs text-emerald-600">- {item}</div>
               ))}
             </div>
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="text-sm font-medium text-slate-800">关键词命中</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="rounded-lg bg-slate-50 p-3">
+              <div className="text-xs font-medium text-slate-800">关键词命中</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
                 {result.gap.matched.map((s) => <Badge key={s} color="green">{s}</Badge>)}
                 {result.gap.partial.map((s) => <Badge key={s} color="amber">{s}</Badge>)}
                 {result.gap.missing.map((s) => <Badge key={s} color="red">{s}</Badge>)}
               </div>
-              <div className="mt-2 text-xs text-slate-400">
+              <div className="mt-1 text-xs text-slate-400">
                 绿=已命中 · 黄=措辞不同已对齐 · 红=原文缺失
               </div>
             </div>
@@ -449,17 +549,17 @@ const ResumeOptimize: FC = () => {
 
           {/* 新增/移除内容 */}
           {(result.added_keywords.length > 0 || result.removed.length > 0) && (
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-xl bg-emerald-50/60 p-4">
-                <div className="mb-2 text-sm font-medium text-emerald-800">本次对齐的关键词</div>
+            <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-lg bg-emerald-50/60 p-3">
+                <div className="mb-1.5 text-xs font-medium text-emerald-800">本次对齐的关键词</div>
                 <div className="flex flex-wrap gap-1.5">
                   {result.added_keywords.length
                     ? result.added_keywords.map((s) => <Badge key={s} color="green">{s}</Badge>)
                     : <span className="text-xs text-slate-400">无</span>}
                 </div>
               </div>
-              <div className="rounded-xl bg-rose-50/60 p-4">
-                <div className="mb-2 text-sm font-medium text-rose-700">本次精简/删除的内容</div>
+              <div className="rounded-lg bg-rose-50/60 p-3">
+                <div className="mb-1.5 text-xs font-medium text-rose-700">本次精简/删除的内容</div>
                 <div className="space-y-1">
                   {result.removed.length
                     ? result.removed.map((s) => (
@@ -471,18 +571,42 @@ const ResumeOptimize: FC = () => {
             </div>
           )}
 
-          {/* 内容保留 */}
-          <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm">
+          {/* 事实保真信任面板 */}
+          <div className={`mb-3 rounded-lg border px-3 py-2 ${result.preservation?.fallback ? "border-amber-200 bg-amber-50/50" : "border-emerald-200 bg-emerald-50/40"}`}>
             {result.preservation?.fallback ? (
-              <span className="text-amber-700">{Icons.alert} 内容保留校验未通过，已回退原简历</span>
+              <div>
+                <div className="flex items-center gap-2 text-amber-700">
+                  {Icons.alert}
+                  <span className="text-xs font-medium">内容保留校验未通过，已回退原简历</span>
+                </div>
+                {(result.preservation?.missing_facts?.length ?? 0) > 0 && (
+                  <div className="mt-1 text-xs text-amber-600">
+                    疑似丢失的关键信息：{result.preservation!.missing_facts.slice(0, 8).join("、")}
+                  </div>
+                )}
+              </div>
             ) : (
-              <>
-                <span className="text-emerald-700">{Icons.check} 关键事实已保留</span>
-                <span className="text-xs text-slate-400">
-                  保留率 {Math.round((result.preservation?.score ?? 1) * 100)}%
-                  {typeof result.edits_applied === "number" && ` · ${result.edits_applied} 处改动`}
-                </span>
-              </>
+              <div>
+                <div className="flex items-center gap-2 text-emerald-700">
+                  {Icons.check}
+                  <span className="text-xs font-medium">事实保真校验通过，关键信息未被改动</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {Object.entries(result.preservation?.critical_facts ?? {}).length > 0 ? (
+                    Object.entries(result.preservation?.critical_facts ?? {}).map(([label, count]) => (
+                      <span key={label} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                        {label} {count} 项
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400">未检测到联系方式/时间等硬事实</span>
+                  )}
+                  <span className="text-xs text-slate-400">
+                    保留率 {Math.round((result.preservation?.score ?? 1) * 100)}%
+                    {typeof result.edits_applied === "number" && ` · ${result.edits_applied} 处改动`}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 
@@ -491,10 +615,10 @@ const ResumeOptimize: FC = () => {
           {result.new_version && (
             <div className="mt-4 flex items-center gap-2">
               <span className="text-sm text-slate-500">导出优化后简历：</span>
-              <button onClick={() => handleExport("pdf", result.new_version!.id)} className="of-btn-outline">
+              <button onClick={() => handleExport("pdf", result.new_version!.id)} className="of-btn-outline px-3 py-1.5 text-xs">
                 {Icons.download} PDF
               </button>
-              <button onClick={() => handleExport("word", result.new_version!.id)} className="of-btn-outline">
+              <button onClick={() => handleExport("word", result.new_version!.id)} className="of-btn-outline px-3 py-1.5 text-xs">
                 {Icons.download} Word
               </button>
             </div>

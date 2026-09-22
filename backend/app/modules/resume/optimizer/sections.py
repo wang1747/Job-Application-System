@@ -18,7 +18,9 @@ SECTION_HEADER = re.compile(
 )
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[A-Za-z]{2,}")
-_PHONE = re.compile(r"(?:\+?\d[\d\s-]{7,}\d)|(?:1[3-9]\d{9})")
+# 手机号（11 位）或座机（区号 2-4 位 + 分隔符 + 号码 7-8 位），
+# 避免把「2023-2027」这类年份区间误判为电话
+_PHONE = re.compile(r"(?:1[3-9]\d{9})|(?:\+?\d{2,4}[\s-]\d{7,8})")
 # URL 只匹配到空白/中文/中文标点为止，避免把后面紧跟的中文（如「个人信息」）粘连进来
 _URL = re.compile(r"https?://[^\s\u4e00-\u9fff，。；：、（）【】《》]+")
 # 明显年份：四位数字后跟「年/届/级/月」（如 2027届、2023年），
@@ -65,6 +67,17 @@ def _extract_critical_facts(text: str) -> Set[str]:
     return critical
 
 
+def _extract_critical_categories(text: str) -> Dict[str, int]:
+    """按类别统计硬事实数量（邮箱/电话/链接/时间），用于前端「事实保真」可视化。"""
+    categories = {
+        "邮箱": len(_EMAIL.findall(text or "")),
+        "电话": len(_PHONE.findall(text or "")),
+        "链接": len(_URL.findall(text or "")),
+        "时间": len(_YEAR.findall(text or "")),
+    }
+    return {key: count for key, count in categories.items() if count > 0}
+
+
 def _extract_key_terms(text: str) -> Set[str]:
     """提取用于保留度评分的词：英文技术词 + 中文二元组 + 数字。
 
@@ -94,6 +107,7 @@ def preservation_result(original: str, rewritten: str) -> PreservationResult:
       会显著拉低该值而被拒绝。
     """
     critical_orig = _extract_critical_facts(original)
+    critical_categories = _extract_critical_categories(original)
     rewritten_norm = _normalize(rewritten)
 
     missing_critical = [
@@ -115,6 +129,7 @@ def preservation_result(original: str, rewritten: str) -> PreservationResult:
         passed=passed,
         missing_facts=(missing_critical + missing_terms[:10]),
         fallback=False,
+        critical_facts=critical_categories,
     )
 
 

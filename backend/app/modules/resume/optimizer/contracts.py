@@ -4,7 +4,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -64,6 +64,8 @@ class PreservationResult:
     passed: bool
     missing_facts: List[str] = field(default_factory=list)
     fallback: bool = False
+    # 硬事实分类计数（邮箱/电话/链接/时间），用于前端「事实保真」可视化
+    critical_facts: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

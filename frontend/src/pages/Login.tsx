@@ -4,7 +4,7 @@ import { loginRequest } from "../api/client";
 import { useAuthStore } from "../store/authStore";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -13,14 +13,14 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
-      setError("请输入用户名和密码");
+    if (!email.trim() || !password.trim()) {
+      setError("请输入邮箱和密码");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const response = await loginRequest(username.trim(), password.trim());
+      const response = await loginRequest(email.trim(), password.trim());
       if (response.success && response.data) {
         login(response.data.access_token);
         navigate("/");
@@ -58,18 +58,24 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">用户名</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">邮箱</label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="of-input"
-                placeholder="请输入用户名"
+                placeholder="请输入注册邮箱"
+                autoComplete="email"
                 disabled={loading}
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">密码</label>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-medium text-slate-700">密码</label>
+                <Link to="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700">
+                  忘记密码？
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}
@@ -98,6 +104,16 @@ export default function Login() {
             <Link to="/register" className="font-medium text-brand-600 hover:text-brand-700">
               去注册
             </Link>
+          </p>
+
+          <p className="mt-3 text-center text-sm text-slate-400">
+            更喜欢本地使用？
+            <a
+              href="/downloads/OfferFlow-desktop.zip"
+              className="font-medium text-brand-600 hover:text-brand-700"
+            >
+              下载桌面版客户端
+            </a>
           </p>
         </div>
       </div>

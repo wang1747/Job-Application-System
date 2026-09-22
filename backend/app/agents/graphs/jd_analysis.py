@@ -35,17 +35,23 @@ def parse_jd_node(state: JDState, config: RunnableConfig | None) -> JDState:
         raise ValueError("未找到当前用户")
     raw_text = state["raw_text"]
     system_prompt = (
-        "You are a professional JD parser. Extract structured info from the JD text.\n"
-        "Output JSON strictly:\n"
+        "你是专业的 JD（职位描述）解析器。请从 JD 原文中提取结构化信息。\n"
+        "核心原则：忠实原文，禁止编造——只提取 JD 原文中明确出现的信息，原文没有的一律留空，绝不凭空补全或猜测。\n"
+        "输出严格 JSON：\n"
         '{\n'
-        '    "company": "...",\n'
-        '    "position": "...",\n'
-        '    "must_have": [...],\n'
-        '    "nice_to_have": [...],\n'
+        '    "company": "公司名",\n'
+        '    "position": "职位名",\n'
+        '    "must_have": ["必备要求"],\n'
+        '    "nice_to_have": ["加分项"],\n'
         '    "tech_stack": {"backend": [], "frontend": [], "infra": [], "other": []},\n'
-        '    "hidden_signals": [...]\n'
+        '    "hidden_signals": ["隐藏信号"]\n'
         '}\n'
-        "If a field cannot be extracted, use empty string or empty list."
+        "规则：\n"
+        "1. company / position：只在原文明确写出时提取，没有就留空字符串，禁止猜测或补全公司名、职位名。\n"
+        "2. must_have / nice_to_have：只提取原文明确列出的要求，不得自行添加原文没有的技能或条件。\n"
+        "3. tech_stack：只归类原文出现过的技术名词，不得凭空添加。\n"
+        "4. hidden_signals：可基于原文措辞推断（如「优先」暗示看重某项能力），但不得编造原文没有的事实。\n"
+        "5. 无法提取的字段用空字符串或空列表。"
     )
     try:
         # 获取用户配置的 LLM

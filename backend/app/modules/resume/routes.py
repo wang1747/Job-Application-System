@@ -1,3 +1,5 @@
+import json
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
@@ -10,9 +12,13 @@ from app.modules.auth.routes import get_current_user_required
 from app.modules.resume.export_service import export_to_pdf, export_to_word
 from app.modules.resume.parser import parse_resume_bytes
 from app.modules.resume.services import (
+    delete_all_resumes,
+    delete_resume,
+    export_resume_data,
     get_resume_versions,
     list_resumes,
     optimize_resume_flow,
+    rollback_to_version,
     upload_resume,
 )
 
@@ -37,6 +43,36 @@ async def get_resume_list(
 ):
     resumes = list_resumes(db, user_id=current_user.id)
     return {"success": True, "data": resumes, "error": None}
+
+
+@router.get("/export-data")
+async def export_resume_data_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """导出当前用户的全部简历数据（JSON 文件下载），用于数据备份与隐私掌控。"""
+    data = export_resume_data(db, user_id=current_user.id)
+    payload = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "count": len(data),
+        "resumes": data,
+    }
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=offerflow_resumes.json"},
+    )
+
+
+@router.delete("/all")
+async def delete_all_resumes_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """删除当前用户的全部简历（不可恢复，调用前应确认）。"""
+    deleted = delete_all_resumes(db, user_id=current_user.id)
+    return {"success": True, "data": {"deleted": deleted}, "error": None}
 
 
 @router.post("/upload")
@@ -119,6 +155,25 @@ async def get_resume_versions_endpoint(
     }
 
 
+@router.post("/{resume_id}/versions/{version_id}/rollback")
+async def rollback_resume_version_endpoint(
+    resume_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """把指定旧版本恢复为当前最新版本（复制旧版本内容，创建一条新版本）。"""
+    try:
+        resume = rollback_to_version(resume_id, version_id, db, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "success": True,
+        "data": {"id": resume.id, "version": resume.version},
+        "error": None,
+    }
+
+
 @router.post("/optimize")
 async def optimize_resume_endpoint(
     req: ResumeOptimizeRequest,
@@ -137,7 +192,7 @@ async def optimize_resume_endpoint(
         if str(exc) == "resume_not_found":
             raise HTTPException(status_code=404, detail="简历不存在")
         if str(exc) == "jd_not_found":
-            raise HTTPException(status_code=404, detail="目标 JD 不存在")
+            raise HTTPException(status_code=404, detail="目标岗位不存在")
         raise HTTPException(status_code=400, detail=str(exc))
     return result
 
@@ -175,3 +230,16 @@ async def export_resume(
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.delete("/{resume_id}")
+async def delete_resume_endpoint(
+    resume_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_required),
+):
+    """删除指定简历（不可恢复）。"""
+    deleted = delete_resume(resume_id, db, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="简历不存在")
+    return {"success": True, "data": {"deleted": deleted}, "error": None}

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { api } from "../api/client";
-import { Card, PageHeader, Badge, Loading } from "../components/ui";
+import { Card, Badge, Loading } from "../components/ui";
 
 interface PresetProvider {
   key: string;
@@ -165,23 +165,44 @@ export default function ModelSettings() {
     }
   };
 
+  const handleExportData = async () => {
+    try {
+      const blob = await api.resume.exportData();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "offerflow_resumes.json";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setSuccess("简历数据已导出");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败");
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm("确定要删除全部简历吗？此操作不可恢复，建议先导出数据备份。")) return;
+    if (!window.confirm("再次确认：删除全部简历后无法恢复，确定继续？")) return;
+    try {
+      const res = await api.resume.deleteAll();
+      if (res.success) {
+        setSuccess(`已删除 ${res.data?.deleted ?? 0} 条简历`);
+      } else {
+        setError(res.error || "删除失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
+    }
+  };
+
   if (loading) {
     return <Loading text="加载模型配置..." />;
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-4 sm:p-6">
-      <PageHeader
-        title="模型设置"
-        subtitle="配置 LLM 模型和 API Key，用于 JD 解析、简历优化、面试题生成等功能"
-        icon={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        }
-      />
-
+    <div>
       {/* 当前配置状态 */}
       {config?.has_config && (
         <Card className="mb-4 border-emerald-200 bg-emerald-50/50 p-4">
@@ -205,7 +226,7 @@ export default function ModelSettings() {
         </Card>
       )}
 
-      {/* BYOK 说明 */}
+      {/* 密钥说明 */}
       <Card className="mb-4 border-blue-100 bg-blue-50/30 p-4">
         <div className="flex items-start gap-3">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0 text-blue-500">
@@ -213,7 +234,7 @@ export default function ModelSettings() {
             <path d="M12 16v-4M12 8h.01" />
           </svg>
           <p className="text-xs leading-relaxed text-slate-600">
-            采用 <span className="font-semibold text-slate-800">BYOK (Bring Your Own Key)</span> 模式：你的 API Key 仅存储在服务端加密配置中，仅用于调用你指定的模型。平台不代付费用，你的使用成本完全可控。
+            你的密钥仅加密存储在服务端，只用于调用你指定的 AI 模型。平台不代付费用，成本完全由你自己掌控。
           </p>
         </div>
       </Card>
@@ -378,6 +399,30 @@ export default function ModelSettings() {
               {testResult.message}
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* 数据管理 */}
+      <Card className="mt-4 p-6">
+        <h2 className="mb-1 text-base font-semibold text-slate-800">数据管理</h2>
+        <p className="mb-4 text-xs leading-relaxed text-slate-500">
+          你的简历数据完全由你掌控。可导出全部简历数据用于备份，或彻底删除（不可恢复，删除前建议先导出备份）。
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={handleExportData} className="of-btn-outline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+            导出数据
+          </button>
+          <button onClick={handleDeleteAll} className="of-btn-danger">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            删除全部简历
+          </button>
         </div>
       </Card>
     </div>

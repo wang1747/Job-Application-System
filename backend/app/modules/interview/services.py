@@ -59,6 +59,25 @@ def import_article(
     db.add(article)
     db.commit()
     db.refresh(article)
+
+    # 贡献语料：用户同意才把面经写入共享语料库（默认关闭）
+    from app.models.user import User as _User
+    owner = db.query(_User).filter(_User.id == user_id).first()
+    if owner and owner.allow_corpus:
+        try:
+            from app.modules.corpus.services import add_corpus_item
+            add_corpus_item(
+                item_type="interview",
+                raw_text=raw_content,
+                db=db,
+                structured={"company": company, "position": position},
+                source="user_upload",
+                user_id=user_id,
+                is_public=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[WARN] 面经贡献语料失败: {e}")
+
     return article, False
 
 
@@ -223,6 +242,7 @@ def save_generated_questions(
             user_id=user_id,
             article_id=article_id,
             question=item["question"],
+            answer=item.get("answer"),
             category=item.get("category"),
             difficulty=item.get("difficulty"),
         )
@@ -288,6 +308,16 @@ def get_interview_session(session_id: str, db: Session, user_id: str) -> Optiona
         InterviewSession.id == session_id,
         InterviewSession.user_id == user_id
     ).first()
+
+
+def finish_interview_session(session_id: str, db: Session, user_id: str) -> bool:
+    """提前结束模拟面试（用户主动结束）。"""
+    session = get_interview_session(session_id, db, user_id)
+    if not session:
+        return False
+    session.status = "finished"
+    db.commit()
+    return True
 
 
 def submit_interview_answer(

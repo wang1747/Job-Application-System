@@ -8,6 +8,7 @@ import type {
   ResumeItem,
 } from "../types";
 import { Card, PageHeader, SectionTitle, Badge, EmptyState, Loading, Tabs } from "../components/ui";
+import { resumeLabel } from "../utils/resume";
 
 type Tab = "library" | "questions" | "simulate";
 
@@ -210,7 +211,7 @@ const InterviewPrep: FC = () => {
     setError("");
     setMessage("");
     if (!genResumeId || !genJdId) {
-      setError("请选择简历和 JD");
+      setError("请选择简历和岗位");
       return;
     }
     setGenerating(true);
@@ -239,7 +240,7 @@ const InterviewPrep: FC = () => {
     setSessionId("");
     setQuestion("");
     if (!simResumeId || !simJdId) {
-      setError("请选择简历和 JD");
+      setError("请选择简历和岗位");
       return;
     }
     setStarting(true);
@@ -283,6 +284,19 @@ const InterviewPrep: FC = () => {
       setError(err instanceof Error ? err.message : "提交失败");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (!sessionId) return;
+    setError("");
+    try {
+      await api.interview.simulateFinish(sessionId);
+      setQuestion("");
+      const summaryRes = await api.interview.simulateSummary(sessionId);
+      if (summaryRes.success && summaryRes.data) setSummary(summaryRes.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "结束失败");
     }
   };
 
@@ -461,10 +475,10 @@ const InterviewPrep: FC = () => {
               <select value={genResumeId} onChange={(e) => setGenResumeId(e.target.value)} className="of-select" aria-label="选择简历">
                 <option value="">选择简历</option>
                 {resumes.map((resume) => (
-                  <option key={resume.id} value={resume.id}>{resume.source_file || "手动输入"}</option>
+                  <option key={resume.id} value={resume.id}>{resumeLabel(resume)}</option>
                 ))}
               </select>
-              <select value={genJdId} onChange={(e) => setGenJdId(e.target.value)} className="of-select" aria-label="选择 JD">
+              <select value={genJdId} onChange={(e) => setGenJdId(e.target.value)} className="of-select" aria-label="选择岗位">
                 <option value="">选择 JD</option>
                 {jds.map((jd) => (
                   <option key={jd.id} value={jd.id}>{jd.company || "未知公司"} · {jd.position || "未知职位"}</option>
@@ -501,15 +515,36 @@ const InterviewPrep: FC = () => {
               </SectionTitle>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {generated.map((item, idx) => (
-                  <div key={idx} className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                  <details key={idx} className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                    <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                       <p className="text-sm font-medium text-slate-900">{item.question}</p>
                       <div className="flex flex-shrink-0 gap-1">
                         {item.category && <Badge color="indigo">{item.category}</Badge>}
                         {item.difficulty && <Badge color="amber">{item.difficulty}</Badge>}
                       </div>
-                    </div>
-                  </div>
+                    </summary>
+                    {item.answer && (
+                      <div className="mt-3 rounded-lg bg-white p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-emerald-600">参考答案</span>
+                          <span className="text-xs text-slate-400">AI 生成，请核实事实</span>
+                        </div>
+                        {item.suspicious_numbers && item.suspicious_numbers.length > 0 && (
+                          <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+                              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                              <path d="M12 9v4M12 17h.01" />
+                            </svg>
+                            <span>以下数字未在你的简历中出现，请核对是否符合实际：<b>{item.suspicious_numbers.join("、")}</b></span>
+                          </div>
+                        )}
+                        <textarea
+                          className="mt-2 min-h-[80px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-emerald-400"
+                          defaultValue={item.answer}
+                        />
+                      </div>
+                    )}
+                  </details>
                 ))}
               </div>
             </Card>
@@ -522,17 +557,31 @@ const InterviewPrep: FC = () => {
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {questions.map((item) => (
-                  <div key={item.id} className="flex items-start justify-between gap-4 rounded-xl bg-slate-50/50 p-3 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">{item.question}</p>
-                      {(item.category || item.difficulty) && (
-                        <div className="mt-1.5 flex gap-1">
-                          {item.category && <Badge color="blue">{item.category}</Badge>}
-                          {item.difficulty && <Badge color="amber">{item.difficulty}</Badge>}
+                  <details key={item.id} className="rounded-xl bg-slate-50/50 p-3 text-sm">
+                    <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900">{item.question}</p>
+                        {(item.category || item.difficulty) && (
+                          <div className="mt-1.5 flex gap-1">
+                            {item.category && <Badge color="blue">{item.category}</Badge>}
+                            {item.difficulty && <Badge color="amber">{item.difficulty}</Badge>}
+                          </div>
+                        )}
+                      </div>
+                    </summary>
+                    {item.answer && (
+                      <div className="mt-3 rounded-lg bg-white p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-emerald-600">参考答案</span>
+                          <span className="text-xs text-slate-400">AI 生成，请核实事实</span>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                        <textarea
+                          className="mt-2 min-h-[80px] w-full resize-y rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-emerald-400"
+                          defaultValue={item.answer}
+                        />
+                      </div>
+                    )}
+                  </details>
                 ))}
               </div>
             )}
@@ -551,13 +600,13 @@ const InterviewPrep: FC = () => {
                 <select value={simResumeId} onChange={(e) => setSimResumeId(e.target.value)} className="of-select" aria-label="选择简历">
                   <option value="">选择简历</option>
                   {resumes.map((resume) => (
-                    <option key={resume.id} value={resume.id}>{resume.source_file || "手动输入"}</option>
+                    <option key={resume.id} value={resume.id}>{resumeLabel(resume)}</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-500">选择 JD</label>
-                <select value={simJdId} onChange={(e) => setSimJdId(e.target.value)} className="of-select" aria-label="选择 JD">
+                <select value={simJdId} onChange={(e) => setSimJdId(e.target.value)} className="of-select" aria-label="选择岗位">
                   <option value="">选择 JD</option>
                   {jds.map((jd) => (
                     <option key={jd.id} value={jd.id}>{jd.company || "未知公司"} · {jd.position || "未知职位"}</option>
@@ -598,8 +647,8 @@ const InterviewPrep: FC = () => {
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 }
-                title="选择简历和 JD 后开始模拟面试"
-                description="AI 将基于你的简历和岗位 JD 进行多轮提问与评估"
+                title="选择简历和岗位后开始模拟面试"
+                description="AI 将基于你的简历和岗位要求进行多轮提问与评估"
               />
             ) : summary ? (
               <div>
@@ -633,16 +682,21 @@ const InterviewPrep: FC = () => {
                   className="of-textarea h-32 resize-none"
                   aria-label="回答"
                 />
-                <button onClick={handleSubmitAnswer} disabled={submitting || !answer.trim()} className="of-btn-primary">
-                  {submitting ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      分析中...
-                    </>
-                  ) : (
-                    "提交回答"
-                  )}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={handleSubmitAnswer} disabled={submitting || !answer.trim()} className="of-btn-primary">
+                    {submitting ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        分析中...
+                      </>
+                    ) : (
+                      "提交回答"
+                    )}
+                  </button>
+                  <button onClick={handleFinish} className="of-btn-outline" title="提前结束并查看总结">
+                    结束面试
+                  </button>
+                </div>
 
                 {history.length > 0 && (
                   <div className="space-y-3 pt-2">

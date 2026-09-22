@@ -25,8 +25,8 @@ def test_resume_list_empty(db_session):
     assert len(resumes) == 0
 
 
-def test_resume_versions_api(client):
-    """测试简历版本历史接口"""
+def test_resume_versions_api(client, sample_jd_text):
+    """测试同一份简历的版本历史（基础简历 + 优化版本归为一组）"""
     first = client.post(
         "/api/v1/resume/upload",
         json={"raw_text": "张三，3年Python开发经验，熟悉Django", "source_file": "a.txt"},
@@ -34,17 +34,18 @@ def test_resume_versions_api(client):
     assert first.json()["success"] is True
     resume_id = first.json()["data"]["id"]
 
-    client.post(
-        "/api/v1/resume/upload",
-        json={"raw_text": "张三，5年Python开发经验，熟悉Django和FastAPI", "source_file": "b.txt"},
+    optimize = client.post(
+        "/api/v1/resume/optimize",
+        json={"resume_id": resume_id, "jd_text": sample_jd_text},
     )
+    assert optimize.status_code == 200
 
     versions = client.get(f"/api/v1/resume/{resume_id}/versions")
     assert versions.status_code == 200
     data = versions.json()["data"]
     assert len(data) == 2
     assert data[0]["version"] == 2
-    assert data[0]["parsed_json"]["skills"]
+    assert data[0]["parsed_json"]["kind"] == "optimized"
 
 
 def test_resume_upload_rejects_empty_text(client):

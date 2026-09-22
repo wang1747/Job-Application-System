@@ -136,12 +136,28 @@ async def optimize_resume_text(
     try:
         with trace_operation("resume_optimize", getattr(user, "id", None)):
             llm = get_user_llm_or_raise(user)
+
+            # RAG：检索语料库中最相似的同方向简历作为写法参考（失败静默降级）
+            reference = ""
+            try:
+                from app.modules.corpus.services import retrieve_similar
+                query = " ".join(filter(None, [jd.position, jd.company, original[:300]]))
+                similar = retrieve_similar(query, top_k=2, item_type="resume")
+                if similar:
+                    reference = "\n\n".join(
+                        f"—— 参考 {i + 1}（相似度 {s['score']:.2f}）——\n{s['raw_text'][:900]}"
+                        for i, s in enumerate(similar)
+                    )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("语料检索失败（不影响优化）: %s", e)
+
             user_prompt = build_user_prompt(
                 original,
                 jd.to_prompt(),
                 gap.matched,
                 gap.missing,
                 gap.partial,
+                reference=reference,
             )
             response = llm.invoke([
                 SystemMessage(content=SYSTEM_PROMPT),

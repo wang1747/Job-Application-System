@@ -2,8 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { registerRequest } from "../api/client";
 
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
 export default function Register() {
-  const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
+  const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,13 +18,18 @@ export default function Register() {
     e.preventDefault();
     setError("");
     setSuccess("");
-    if (!username.trim() || !password.trim()) { setError("请输入用户名和密码"); return; }
+    const acc = account.trim();
+    if (!acc || !password.trim()) { setError("请输入邮箱和密码"); return; }
+    if (!EMAIL_RE.test(acc)) {
+      setError("请输入正确的邮箱地址");
+      return;
+    }
     if (password.length < 6) { setError("密码至少 6 位"); return; }
     if (password !== confirmPassword) { setError("两次密码输入不一致"); return; }
 
     setLoading(true);
     try {
-      const response = await registerRequest(username.trim(), password.trim());
+      const response = await registerRequest(acc, name.trim(), password.trim());
       if (response.success) {
         setSuccess("注册成功，正在跳转到登录页...");
         setTimeout(() => navigate("/login"), 1200);
@@ -55,9 +63,14 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">用户名</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                className="of-input" placeholder="请输入用户名" disabled={loading} />
+              <label className="mb-2 block text-sm font-medium text-slate-700">昵称（称呼）</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                className="of-input" placeholder="怎么称呼你（选填，留空自动生成）" disabled={loading} />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">邮箱</label>
+              <input type="text" value={account} onChange={(e) => setAccount(e.target.value)}
+                className="of-input" placeholder="请输入邮箱" disabled={loading} />
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">密码（至少 6 位）</label>

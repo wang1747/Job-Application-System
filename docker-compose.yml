@@ -17,6 +17,7 @@ services:
     volumes:
       - ./offerflow.db:/app/offerflow.db
       - ./chroma_db:/app/chroma_db
+      - ./backend/app/core/salary_benchmark_data.json:/app/backend/app/core/salary_benchmark_data.json
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]

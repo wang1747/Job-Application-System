@@ -19,17 +19,18 @@ def _match_skill_in_text(skill: str, text_norm: str) -> bool:
 
 
 def _jd_requirements(jd_text: str) -> List[str]:
-    """从 JD 文本提取需求词：先抽技能词典命中的词，再补英文技术词。"""
+    """从 JD 文本提取需求词：技能词典命中的词 → 英文技术词（去重）。"""
     reqs: List[str] = []
     seen: Set[str] = set()
 
     # 1. 技能词典命中的技能（含中英文）
     for skill in extract_skills(jd_text):
-        if skill not in seen:
+        key = normalize_text(skill)
+        if key not in seen:
             reqs.append(skill)
-            seen.add(skill)
+            seen.add(key)
 
-    # 2. 英文技术词（过滤掉常见的连接词）
+    # 2. 英文技术词（过滤连接词 + normalize 去重，避免 FastAPI/fastapi 重复）
     stop = {
         "the", "and", "you", "are", "for", "with", "have", "will", "that",
         "this", "our", "your", "from", "who", "what", "when", "where",
@@ -38,9 +39,11 @@ def _jd_requirements(jd_text: str) -> List[str]:
         "preferred", "required", "must", "nice", "etc", "also", "other",
     }
     for kw in re.findall(r"[A-Za-z][A-Za-z0-9+#./-]{1,}", jd_text.lower()):
-        if len(kw) >= 3 and kw not in stop and kw not in seen:
-            reqs.append(kw)
-            seen.add(kw)
+        if len(kw) >= 3 and kw not in stop:
+            key = normalize_text(kw)
+            if key not in seen:
+                reqs.append(kw)
+                seen.add(key)
 
     # 控制数量，避免噪音
     return reqs[:60]
@@ -98,8 +101,10 @@ def check_ats_compatibility(resume_text: str, jd_text: str = "") -> Dict:
                 else:
                     missing.append(req)
             coverage = len(matched) / len(reqs)
+            # 按覆盖率连续扣分，避免「技术岗关键词全命中就 100 分」的虚高
+            if coverage < 1.0:
+                score -= int((1 - coverage) * 30)
             if coverage < 0.5:
-                score -= max(10, int((0.5 - coverage) * 60))
                 issues.append(
                     f"JD 关键词命中率仅 {int(coverage * 100)}%，ATS 可能无法识别相关技能"
                 )

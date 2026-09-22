@@ -86,16 +86,26 @@ CONDENSE_SYSTEM_PROMPT = """你是简历精简专家。下面的简历内容超�
 }"""
 
 
-def build_user_prompt(resume_text: str, jd_prompt: str, matched, missing, partial) -> str:
-    """构造用户提示词，把差距分析作为显式输入喂给 LLM。"""
+def build_user_prompt(resume_text: str, jd_prompt: str, matched, missing, partial, reference: str = "") -> str:
+    """构造用户提示词，把差距分析作为显式输入喂给 LLM。
+
+    reference：可选，语料库检索到的同方向优秀简历参考（RAG），事实仍以原始简历为准。
+    """
     def _join(items):
         items = [str(x) for x in (items or []) if str(x).strip()]
         return "、".join(items) if items else "（无）"
 
-    return USER_TEMPLATE.format(
+    prompt = USER_TEMPLATE.format(
         resume=resume_text,
         jd=jd_prompt,
         matched=_join(matched),
         missing=_join(missing),
         partial=_join(partial),
     )
+    if reference:
+        prompt += (
+            "\n\n【同方向优秀简历参考】下面是从语料库检索到的写法参考，"
+            "只借鉴其结构、分节、要点化与量化表达；事实（学校/公司/数字/经历）仍只能来自原始简历。\n"
+            + reference
+        )
+    return prompt

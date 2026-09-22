@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { JDItem, JDParseResult } from "../types";
-import { Card, PageHeader, SectionTitle, Badge, EmptyState, Loading, Icons } from "../components/ui";
+import { Card, SectionTitle, Badge, EmptyState, Loading, Icons } from "../components/ui";
+import { useStageProgress } from "../hooks/useStageProgress";
 
 const formatTime = (iso: string) => {
   const d = new Date(iso);
@@ -13,6 +15,13 @@ export default function JDAnalysis() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JDParseResult | null>(null);
+  const [parsedJdId, setParsedJdId] = useState("");
+  const navigate = useNavigate();
+
+  const parseStage = useStageProgress(
+    ["正在识别岗位信息…", "正在提取技能要求…", "正在分析隐藏信号…"],
+    loading,
+  );
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<JDItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -45,17 +54,18 @@ export default function JDAnalysis() {
 
   const handleParse = async () => {
     const trimmed = rawText.trim();
-    if (!trimmed) { showError("请输入 JD 文本"); return; }
+    if (!trimmed) { showError("请粘贴职位要求"); return; }
     setLoading(true); setError(null); setResult(null);
     try {
       const response = await api.jd.parse(trimmed);
       if (response.success && response.data?.parsed) {
         const parsed = response.data.parsed;
         if (Object.keys(parsed).length === 0) {
-          showError("解析结果为空，请检查 JD 文本内容");
+          showError("解析结果为空，请检查职位要求内容");
           setResult(null);
         } else {
           setResult(parsed);
+          setParsedJdId(response.data.id || "");
         }
         await loadHistory();
         setRawText("");
@@ -91,7 +101,7 @@ export default function JDAnalysis() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除这条 JD 吗？")) return;
+    if (!confirm("确定要删除这条职位要求吗？")) return;
     try {
       await api.jd.delete(id);
       await loadHistory();
@@ -154,19 +164,13 @@ export default function JDAnalysis() {
 
   return (
     <div>
-      <PageHeader
-        title="JD 智能解析"
-        subtitle="粘贴职位描述，AI 自动提取硬性要求、加分项、技术栈和隐藏信号"
-        icon={Icons.sparkle}
-      />
-
       {error && <div className="of-alert-error mb-4">{Icons.alert}<span>{error}</span></div>}
 
       <Card className="mb-5 p-5">
-        <SectionTitle>输入 JD 文本</SectionTitle>
+        <SectionTitle>粘贴职位要求</SectionTitle>
         <textarea
           className="of-textarea h-48"
-          placeholder="粘贴职位描述 (JD) 文本..."
+          placeholder="粘贴招聘要求文本..."
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
           disabled={loading}
@@ -175,7 +179,7 @@ export default function JDAnalysis() {
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button onClick={handleParse} disabled={loading || !rawText.trim()} className="of-btn-primary">
             {loading ? (
-              <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />解析中...</>
+              <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />{parseStage}</>
             ) : <>开始解析</>}
           </button>
           <input
@@ -243,6 +247,16 @@ export default function JDAnalysis() {
               </div>
             )}
           </div>
+          {parsedJdId && (
+            <div className="mt-4 flex gap-2 border-t border-emerald-100 pt-3">
+              <button
+                onClick={() => navigate(`/resume?jd_id=${parsedJdId}`)}
+                className="of-btn-outline flex-1 py-1.5 text-sm"
+              >
+                针对此岗位优化简历
+              </button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -251,7 +265,7 @@ export default function JDAnalysis() {
         {historyLoading ? (
           <Loading text="加载中..." />
         ) : history.length === 0 ? (
-          <EmptyState title="暂无 JD 记录" description="快来解析第一条吧" />
+          <EmptyState title="暂无职位记录" description="粘贴招聘要求，AI 帮你拆出重点" />
         ) : (
           <div className="space-y-2">
             {history.map((item) => (

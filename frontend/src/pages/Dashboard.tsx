@@ -96,10 +96,42 @@ const Dashboard: FC = () => {
             {Icons.alert}
             <span>尚未配置大模型，部分 AI 功能暂不可用。</span>
           </div>
-          <Link to="/settings" className="of-btn bg-amber-600 px-3 py-1.5 text-white hover:bg-amber-700">
+          <Link to="/preferences?tab=model" className="of-btn bg-amber-600 px-3 py-1.5 text-white hover:bg-amber-700">
             去配置
           </Link>
         </div>
+      )}
+
+      {apps.length === 0 && (
+        <Card className="mb-6 border-brand-200 bg-gradient-to-br from-brand-50/60 to-white p-5">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-slate-900">第一次求职？跟着这 3 步开始</h2>
+            <p className="mt-0.5 text-sm text-slate-500">几分钟就能做出第一份针对心仪岗位的简历</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Link to="/resume/generate" className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">1</span>
+                <span className="text-sm font-medium text-slate-900">做一份简历</span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">没有简历？告诉 AI 你的学校和经历，自动生成一份</p>
+            </Link>
+            <Link to="/job" className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">2</span>
+                <span className="text-sm font-medium text-slate-900">分析职位要求</span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">粘贴心仪岗位的招聘要求，AI 帮你拆出重点</p>
+            </Link>
+            <Link to="/job" className="group rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">3</span>
+                <span className="text-sm font-medium text-slate-900">看你和岗位的匹配</span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">看看简历和岗位差在哪，照着补</p>
+            </Link>
+          </div>
+        </Card>
       )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -178,7 +210,7 @@ const Dashboard: FC = () => {
         <Card className="mt-5 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="of-section-title">匹配速览</h2>
-            <Link to="/match" className="text-xs font-medium text-brand-600 hover:text-brand-700">查看全部</Link>
+            <Link to="/job" className="text-xs font-medium text-brand-600 hover:text-brand-700">查看全部</Link>
           </div>
           <div className="space-y-2">
             {rankings.slice(0, 4).map((item) => (

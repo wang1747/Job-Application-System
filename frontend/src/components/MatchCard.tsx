@@ -20,7 +20,7 @@ const MatchCard: FC<MatchCardProps> = ({ result }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-semibold text-slate-900">
-            {result.company || `JD ${result.jd_id.slice(0, 8)}`}
+            {result.company || `岗位 ${result.jd_id.slice(0, 8)}`}
           </p>
           <span className={`of-badge bg-${color}-50 text-${color}-600`}>{label}</span>
         </div>

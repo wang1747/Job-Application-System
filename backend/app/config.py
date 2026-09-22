@@ -74,6 +74,20 @@ class Settings(BaseSettings):
         description="n8n 调用提醒导出接口时的服务令牌"
     )
 
+    # ===== 薪资基准数据刷新 =====
+    salary_benchmark_refresh_days: int = Field(
+        default=30,
+        description="薪资基准数据自动刷新周期（天），0 表示禁用自动刷新"
+    )
+
+    # ===== 邮件配置（找回密码验证码）=====
+    smtp_host: Optional[str] = Field(default=None, description="SMTP 服务器，如 smtp.qq.com")
+    smtp_port: int = Field(default=465, description="SMTP 端口（465=SSL，587=STARTTLS）")
+    smtp_user: Optional[str] = Field(default=None, description="发件邮箱账号")
+    smtp_password: Optional[str] = Field(default=None, description="SMTP 授权码（非登录密码）")
+    smtp_from: Optional[str] = Field(default=None, description="发件人显示，默认同 smtp_user")
+    smtp_use_ssl: bool = Field(default=True, description="是否用 SSL（465 端口为 True，587 为 False）")
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",

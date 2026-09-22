@@ -40,14 +40,14 @@ export default function ModelConfigGate({ children }: { children: ReactNode }) {
     return (
       <div className="mx-auto max-w-lg py-12">
         <div className="of-card p-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-500 [&>svg]:h-full [&>svg]:w-full">
             {Icons.alert}
           </div>
           <h2 className="text-lg font-bold text-slate-900">请先完成模型设置</h2>
           <p className="mt-2 text-sm text-slate-500">
-            该功能依赖 LLM，需要先配置你自己的 API Key（BYOK 架构，密钥加密存储）。
+            该功能需要先配置你自己的 AI 密钥（安全加密存储，不会泄露）。
           </p>
-          <Link to="/settings" className="of-btn-primary mt-6 inline-flex">
+          <Link to="/preferences?tab=model" className="of-btn-primary mt-6 inline-flex">
             前往设置
           </Link>
         </div>
