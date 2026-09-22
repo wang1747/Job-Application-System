@@ -9,6 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+.env.prod
+.env.local
 
 # Node dependencies
 node_modules/
@@ -19,5 +21,25 @@ node_modules/
 # Vector database
 chroma_db/
 
-# Database backups
+# ===== 数据库与本地数据（禁止入库）=====
+# SQLite 数据库本体：含真实用户邮箱与 bcrypt 口令哈希
+*.db
+*.sqlite
+*.sqlite3
+# 任何形式的数据库备份（含带时间戳的 *.db.bak-YYYYMMDD-HHMMSS）
 *.db.bak
+*.db.bak*
+*.sqlite.bak*
+# 通用带时间戳的临时备份（*.bak-<时间戳>）
+*.bak-*
+# 语料 / 语料脚本 / 导出产物（不进版本库）
+resume_corpus/
+scripts/corpus_data/
+logs/
+*.log
+
+# ===== 本地密钥与部署凭据 =====
+*.pem
+*.key
+id_rsa*
+deploy/.env*
